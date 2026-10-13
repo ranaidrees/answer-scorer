@@ -5,3 +5,4 @@ private/
 .claude/fix-mode
 __pycache__/
 .venv/
+evals/_*
