@@ -1,0 +1,42 @@
+# Generic competency rubric. Synthetic, written for this reference implementation.
+# Descriptors are observable behaviours the candidate describes in the answer.
+# Writing style, length, names and life details are never evidence.
+id: teamwork
+name: Teamwork
+definition: >-
+  Works with other people towards a shared goal: shares information, listens to and
+  uses other views, handles disagreement constructively, and supports the team's result.
+  Assign the highest level from 3 to 5 whose descriptors are all met. If level 3 is not
+  met, assign 2 where the candidate describes an action of their own in a relevant
+  example, otherwise 1. The descriptors at levels 1 and 2 describe typical answers;
+  where they conflict with this rule, the rule decides.
+levels:
+  - level: 1
+    label: Limited
+    descriptors:
+      - Does not answer the question, or gives only general statements or a list of qualities with no specific situation.
+      - Describes only what other people did or failed to do, with no action of their own.
+  - level: 2
+    label: Developing
+    descriptors:
+      - Describes their own part in a team task, but no action directed at another person (sharing information, asking, helping or listening).
+      - Mentions a disagreement or difficulty but describes no step of their own to resolve it.
+      - Leaves the result for the team vague or unstated.
+  - level: 3
+    label: Competent
+    descriptors:
+      - Gives a specific example of working with others towards a shared goal, with their own role clear.
+      - Describes at least one concrete cooperative action, such as sharing information, asking for or offering help, or listening to another view.
+      - Describes at least one step they took in response to a disagreement or difficulty, and states the result.
+  - level: 4
+    label: Strong
+    descriptors:
+      - Describes asking for other people's views before acting, and changing their own approach in response.
+      - Describes specific steps taken to resolve a disagreement or difficulty, naming the concern of at least one other person.
+      - Describes supporting a colleague or sharing work or credit, and states what their actions changed for the team.
+  - level: 5
+    label: Exceptional
+    descriptors:
+      - Describes what each side in a disagreement wanted, the step taken for each, and that those involved agreed the way forward.
+      - Describes proposing or agreeing a practice that the team kept using afterwards.
+      - States the team result with a specific detail, such as a quantity, a deadline met or a named outcome.
