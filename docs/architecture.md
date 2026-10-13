@@ -54,7 +54,9 @@ The signed-in owner also holds Cognitive Services OpenAI User on the Foundry res
 - `id-deploy`: one credential, for jobs that run in the `demo` environment. That environment needs the owner's approval, so nothing can sign in as `id-deploy` without it.
 - `id-eval`: two credentials, one for pull request runs and one for runs on the `main` branch.
 
-A workflow in any other repository, branch or environment presents a different subject and is refused. The tenant, subscription and client IDs are GitHub repository variables; they appear in no file.
+A workflow in any other repository presents a different subject and is refused, and so does a job in this repository that runs outside the `demo` environment and asks for `id-deploy`. `id-eval` is wider on purpose: its pull request subject does not name a branch, so a pull request run from any branch of this repository can sign in as `id-eval`. That is accepted because `id-eval` holds only the inference role, and only people with write access can push a branch here. Pull requests from forks are a separate case: their workflows wait for approval, receive no secrets and only a read-only token, and cannot request an OIDC token, so they cannot sign in as `id-eval`.
+
+The tenant, subscription and client IDs are GitHub repository variables; they appear in no file.
 
 ## What is set where
 
