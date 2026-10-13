@@ -6,12 +6,25 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
+    "azure-identity>=1.26.0",
+    "azure-monitor-opentelemetry>=1.8.11",
+    "fastapi>=0.143.0",
+    # Imported by opentelemetry-instrumentation-openai-v2, which does not declare it.
+    # The openai package itself uses httpx2.
+    "httpx>=0.28.1",
+    "openai>=3.29.0",
+    "opentelemetry-instrumentation-openai-v2>=2.4b0",
+    # Pinned to the release made alongside the instrumentation above: later releases
+    # dropped a module that it imports.
+    "opentelemetry-util-genai==0.4b0",
     "pydantic>=2",
     "pyyaml>=6.0",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.13.1",
     "poethepoet>=0.34",
     "pytest>=8.3",
     "ruff>=0.9",
@@ -57,13 +70,16 @@ help = "Run the offline eval suite against the live model deployment."
 cmd = "python -c \"print('not yet implemented')\""
 
 [tool.poe.tasks.run]
-help = "Run the API and demo page locally."
-cmd = "python -c \"print('not yet implemented')\""
+help = "Run the API and demo page on http://localhost:8000, with settings from .env.local."
+cmd = "uvicorn scorer.api:app --host 127.0.0.1 --port 8000"
+envfile = ".env.local"
 
 [tool.poe.tasks.smoke]
-help = "Smoke test against the locally running app."
-cmd = "python -c \"print('not yet implemented')\""
+help = "Start the app locally, score a strong, a weak and an injection answer, then stop it."
+cmd = "python scripts/smoke.py --local"
+envfile = ".env.local"
 
 [tool.poe.tasks.smoke-remote]
-help = "Smoke test against the live URL."
-cmd = "python -c \"print('not yet implemented')\""
+help = "Smoke test against the live URL (--base-url, or CONTAINER_APP_FQDN from the environment)."
+cmd = "python scripts/smoke.py --remote"
+envfile = ".env.local"
