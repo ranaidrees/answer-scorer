@@ -54,12 +54,14 @@ GRAPHQL_BLOCKED = (
 
 # A tool name (optionally quoted, as in PowerShell's & "az.cmd"), then any global flags
 # or the PowerShell stop-parsing token before the subcommand.
-_VALUE = r"(?:\"[^\"]*\"|'[^']*'|\S+)"
-_FLAGS = r"(?:(?:--%|-{1,2}[\w-]+(?:(?:=|\s+)" + _VALUE + r")?)\s+)*?"
+# A flag value never starts with a dash, which keeps the pattern unambiguous and linear.
+_VALUE = r"(?:\"[^\"]*\"|'[^']*'|[^\s\"'-]\S*)"
+_FLAGS = r"(?:(?:--%|--?[A-Za-z0-9][\w-]*(?:(?:=|\s+)" + _VALUE + r")?)\s+)*?"
 _AZ = r"(?<![\w.-])az(?:\.cmd|\.exe)?[\"']?\s+" + _FLAGS
 _AZD = r"(?<![\w.-])azd(?:\.exe)?[\"']?\s+" + _FLAGS
-_GH = r"(?<![\w.-])gh(?:\.exe)?[\"']?\s+"
-_GIT = r"(?<![\w.-])git(?:\.exe)?[\"']?\s+"
+# Windows runs GH and GIT as readily as gh and git.
+_GH = r"(?<![\w.-])(?i:gh(?:\.exe)?)[\"']?\s+"
+_GIT = r"(?<![\w.-])(?i:git(?:\.exe)?)[\"']?\s+"
 _MOVES = re.compile(
     r"(?<![\w.-])(?:cd|pushd|popd|chdir|Set-Location|Push-Location|sl)(?![\w-])"
     r"|(?<![\w.-])git(?:\.exe)?[\"']?\s+(?:\S+\s+)*?(?:checkout|switch|-C|--git-dir|--work-tree)(?![\w-])",
@@ -212,12 +214,13 @@ def _implicit_push_target(cwd: str | None, moved: bool) -> str:
 
 
 def _check_git(segment: str, cwd: str | None, moved: bool) -> None:
-    match = re.search(_GIT + r"(?:-\S+\s+(?:\S+\s+)?)*?push\b(.*)", segment, re.DOTALL)
+    match = re.search(_GIT + r"(?:-\S+\s+(?:[^-\s]\S*\s+)?)*?push\b(.*)", segment, re.DOTALL)
     if not match:
         return
     to_main = "pushes to main are blocked: every change goes through a pull request"
-    args = [arg.strip("\"'`()") for arg in match.group(1).split()]
-    args = [arg for arg in args if arg and "<" not in arg and ">" not in arg]
+    raw = [arg for arg in match.group(1).split() if "<" not in arg and ">" not in arg]
+    args = [arg.strip("\"'`()") for arg in raw]
+    args = [arg for arg in args if arg]
     flags = [arg for arg in args if arg.startswith("-")]
     refs = [arg for arg in args if not arg.startswith("-")]
     if any(
@@ -242,6 +245,10 @@ def _check_git(segment: str, cwd: str | None, moved: bool) -> None:
             raise Deny(to_main)
         if target in ("HEAD", "@") and _implicit_push_target(cwd, moved) == PROTECTED_BRANCH:
             raise Deny(to_main)
+    # A branch given as a variable or a command substitution cannot be read, so it could
+    # be main. A leading "(" is PowerShell's form of the same thing.
+    if any("$" in arg or "`" in arg or arg.startswith("(") for arg in raw[1:]):
+        raise Deny("name the branch in the push in full, so the gate can read it: blocked")
 
 
 def _check_gh_repo(segment: str) -> None:
@@ -294,12 +301,24 @@ def _names_repo_root(segment: str) -> bool:
     variable may stand for owner/repo), but not deeper paths such as .../pulls.
     """
     for token in segment.split():
-        path = re.sub(r"^https?://[^/]+", "", token.strip("\"'`()")).lstrip("/")
-        parts = path.split("/")
+        path = re.sub(r"^https?://[^/]+", "", token.strip("\"'`()")).strip("/")
+        parts = path.split("?", 1)[0].split("/")
         if parts[0] != "repos" or len(parts) < 2 or not all(parts[1:]):
             continue
         if len(parts) == 3 or (len(parts) == 2 and "$" in parts[1]):
             return True
+    return False
+
+
+def _endpoint_is_a_variable(segment: str) -> bool:
+    """True if a bare argument is nothing but a shell variable, such as "$URL"."""
+    tokens = segment.split()
+    for index, token in enumerate(tokens):
+        if not re.fullmatch(r"[\"']?\$[\w{}:.]+[\"']?", token):
+            continue
+        if index and re.fullmatch(r"-{1,2}[\w-]+", tokens[index - 1]):
+            continue  # the value of a flag such as --jq or --input, not the endpoint
+        return True
     return False
 
 
@@ -321,8 +340,10 @@ def _check_gh_api(segment: str, cwd: str | None, alone: bool) -> None:
     if re.search(r"/branches/[^/\s\"']+/protection", segment) and method == "DELETE":
         raise Deny("deleting branch protection is blocked")
     ruleset = re.search(r"/rulesets/[^\s\"']+", segment)
-    environment = re.search(r"/environments/[^\s\"'/]+(?=[\s\"']|$)", segment)
+    environment = re.search(r"/environments/[^\s\"'/]+/?(?=[\s\"']|$)", segment)
     repo_root = _names_repo_root(segment)
+    if method != "POST" and _endpoint_is_a_variable(segment):
+        raise Deny("write the endpoint out in full so the gate can read it: blocked")
     if not (ruleset or environment or repo_root):
         return
     if method == UNREADABLE:

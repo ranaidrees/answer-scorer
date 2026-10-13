@@ -716,6 +716,85 @@ def test_the_at_alias_for_head_is_read(repo_on_main: Path, repo_on_branch: Path)
     assert_allowed(gate("git push origin @", cwd=str(repo_on_branch)))
 
 
+# --- shapes the third verifier run found passing ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git push origin "$(git branch --show-current)"',
+        "git push -u origin $(git branch --show-current)",
+        "git push origin $BRANCH",
+        'git push origin "${BRANCH}"',
+        "git push origin HEAD:$BRANCH",
+        "git push origin HEAD:$(git branch --show-current)",
+        "git push origin `git branch --show-current`",
+        "git push origin (git branch --show-current)",
+    ],
+)
+@pytest.mark.parametrize("where", ["main", "branch"])
+def test_a_branch_the_gate_cannot_read_is_denied(
+    command: str, where: str, repo_on_main: Path, repo_on_branch: Path
+) -> None:
+    cwd = repo_on_main if where == "main" else repo_on_branch
+    assert_denied(gate(command, cwd=str(cwd)), "blocked")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "GIT push origin main",
+        "Git.exe push --force origin feature",
+        f"GH api -X DELETE {REPO}/rulesets/42",
+        "GH repo delete example-owner/answer-scorer --yes",
+    ],
+)
+def test_tool_names_are_read_in_any_case(command: str, repo_on_branch: Path) -> None:
+    assert_denied(gate(command, "PowerShell", cwd=str(repo_on_branch)), "blocked")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'gh api -X DELETE "$URL"',
+        "gh api -X DELETE $RULESET_URL",
+        "gh api -X PUT $URL --input body.json",
+        "gh api -X PATCH ${REPO_URL} -f name=other",
+        f"gh api -X DELETE /{REPO}/",
+        f"gh api -X PATCH /{REPO}/ -f visibility=private",
+        f"gh api -X DELETE {REPO}/environments/demo/",
+        f"gh api -X PATCH '{REPO}?x=1' -f private=true",
+    ],
+)
+def test_endpoints_the_gate_cannot_read_and_trailing_slashes_are_denied(command: str) -> None:
+    assert_denied(gate(command), "blocked")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f'gh api {REPO}/pulls --jq "$FILTER"',
+        "gh api $URL",
+        f"gh api -X POST {REPO}/issues --input $FILE",
+    ],
+)
+def test_variables_in_harmless_places_pass(command: str) -> None:
+    assert_allowed(gate(command))
+
+
+@pytest.mark.parametrize("tool_name", ["az", "azd", "git"])
+def test_a_long_run_of_flags_is_judged_quickly(tool_name: str) -> None:
+    import time
+
+    flags = " ".join(f"--flag-{number}" for number in range(40))
+    started = time.monotonic()
+    harmless = gate(f"{tool_name} {flags} version")
+    blocked = gate(f"az {flags} account set -s other")
+    assert time.monotonic() - started < 20
+    assert_allowed(harmless)
+    assert_denied(blocked, "az account set")
+
+
 def test_the_gate_never_exits_1() -> None:
     result = run_hook("cloud_gate.py", {"tool_name": "Bash", "tool_input": {"command": 7}})
     assert result.returncode == 2
