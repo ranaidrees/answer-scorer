@@ -51,20 +51,20 @@ The lead updates the **Status** section at the end of this file after every merg
 
 ## Waves
 
-The build started on Tuesday 13 October, a day later than first planned, and follows the three phases in `instructions-for-claude-code.md`. Times are targets.
+The build started on Tuesday 13 October, a day later than first planned, and follows the three phases in `instructions-for-claude-code.md`. Setup finished that morning and the unattended build starts at about 16:00. Times are targets.
 
 | Wave | Target | Slices | Ends when |
 |---|---|---|---|
-| Setup | Tuesday morning, owner present | Phase 1: sign-ins, repo, GitHub app (H1) | Tools signed in, repo created |
-| W0 | Tuesday by 13:00, unattended | S0, GitHub app PR, ruleset, `demo` environment, V | Harness and rubrics merged |
-| W1 | Tuesday by 16:00, unattended | S1 (live), with S2 and S4a (offline) in parallel | S1, S2, S4a merged |
-| W2 | Tuesday by 20:00, unattended | S3 (live), with S4b and S5a (offline) in parallel | S3, S4b, S5a merged (S3 first) |
-| W3 | Tuesday evening to Wednesday 07:00, unattended | S4c, then S6 with local traffic. The first deploy is queued for the owner | Gate proven, dashboard showing local data |
+| Setup | Tuesday, owner present (done) | Phase 1: sign-ins, repo, GitHub app (H1) | Tools signed in, repo created |
+| W0 | Tuesday by 19:00, unattended | S0, GitHub app PR, ruleset, `demo` environment, V | Harness and rubrics merged |
+| W1 | Tuesday by 22:00, unattended | S1 (live), with S2 and S4a (offline) in parallel | S1, S2, S4a merged |
+| W2 | Wednesday by 02:00, unattended | S3 (live), with S4b and S5a (offline) in parallel | S3, S4b, S5a merged (S3 first) |
+| W3 | Wednesday by 07:00, unattended | S4c, then S6 with local traffic. The first deploy is queued for the owner | Gate proven, dashboard showing local data |
 | W4 | Wednesday by 09:00, unattended | S8 with local screenshots and the final verification; items that need the live URL are marked "pending live" | Demo pack merged; lead stops and gives the build report |
 | Finish | Wednesday 09:00 to 13:00, owner present | Phase 3: S5b (H2, H3), live traffic, live screenshots, re-verify "pending live" items | App live; all green or named |
 | Test | Wednesday 15:00 to 18:00 | Owner H4 (and H5); lead fixes defects only | Freeze: warm (H3), smoke, tag |
 
-**Keeping to the clock.** The unattended build runs without a break until it is finished, into Tuesday night if it has to. At the end of each wave the lead checks the clock (`date`) against the target. If it is more than two hours behind, it applies "Cut if behind" in order and records the cut under Deviations.
+**Keeping to the clock.** The unattended build runs without a break, through Tuesday night, until it is finished. At the end of each wave the lead checks the clock (`date`) against the target. If it is more than two hours behind, it applies "Cut if behind" in order and records the cut under Deviations.
 
 **Checkpoint, Wednesday 09:00.** The unattended build stops and reports whatever the state, so the owner can start Phase 3.
 

@@ -6,7 +6,7 @@ These instructions run the whole build of this project in three phases. The owne
 - **Phase 2: unattended build.** The owner is not to be interrupted. Fully autonomous.
 - **Phase 3: finish.** The owner is present for deploy approvals.
 
-All three phases run in the daytime. Phase 2 is still unattended: the owner may be nearby, but the build must run from start to finish without asking them anything.
+Phases 1 and 3 run in the daytime. Phase 2 starts on Tuesday afternoon and runs on through the night until it is finished. It is unattended: the owner may be nearby, but the build must run from start to finish without asking them anything.
 
 The project itself is described in `intent/intent.md`, `intent/spec.md`, `intent/plan.md`, `RUNBOOK.md` and `CHANGELOG.md`. Where this file and `RUNBOOK.md` section 4 differ, this file wins.
 
@@ -77,9 +77,40 @@ Work through these steps in order. When a step needs the owner, stop, tell them 
     > 1. Pause Windows Update for a week, keep the PC plugged in and, if it is a laptop, keep the lid open. Do not restart, sleep or sign out of the PC while the build runs, and do not switch the `gh` account or the Azure subscription in any terminal.
     > 2. Type /exit, then start Claude Code again from this folder with:
     >    claude --permission-mode auto --settings private\claude-overnight-settings.json
-    > 3. Check that the status bar shows auto mode, then type this single line and press Enter:
-    >    Follow Phase 2 of instructions-for-claude-code.md. I delegate to you, for this repo and rg-answer-scorer-demo only: merging each PR once its required checks pass, the GitHub settings, secrets, ruleset and demo environment it lists, and the Azure resources, identities and role assignments in spec section 9. Never approve a deployment.
+    > 3. Check that the status bar shows auto mode, then paste the kick-off prompt and press Enter. If the terminal warns that the text has several lines, choose to paste anyway.
     > 4. Watch for 10 minutes, then leave it running. You can carry on with other work on this PC, but do not type in this session until it gives its build report.
+
+    The kick-off prompt:
+
+    ```text
+    You are the lead for an unattended build. I will not be at the keyboard, so do not ask me anything and do not stop until the work is done.
+
+    Read these in full before doing anything else: instructions-for-claude-code.md, intent/intent.md, intent/spec.md, intent/plan.md, RUNBOOK.md and CHANGELOG.md. Then follow Phase 2 of instructions-for-claude-code.md, and only Phase 2. Where the files differ, instructions-for-claude-code.md wins, then plan.md, then RUNBOOK.md.
+
+    What I delegate to you, for the repository ranaidrees/answer-scorer and the Azure resource group rg-answer-scorer-demo only:
+    - pushing branches, opening pull requests and merging each one once its required checks pass
+    - the GitHub settings, secrets, variables, ruleset and demo environment that Phase 2 lists
+    - creating the Azure resources, identities and role assignments in spec section 9
+
+    What you must never do:
+    - approve or reject a deployment, deploy the application yourself, or dispatch deploy.yml
+    - touch any other repository or resource group, or change the Azure subscription
+    - let projected Azure spend pass 10 GBP (follow "Spend limit")
+    - push to main, weaken a test, threshold or dataset to make something pass, or work round a denied action
+    - write secrets, IDs, the local folder path or any personal or employer details into the repo; it is public
+    - read private/ or any .env file
+
+    Where things stand: Phase 1 is finished. The repo exists with the intent commits on main. Pull request 1 holds the two Claude workflows and is waiting for you to update and merge. gh, az and azd are signed in, the resource providers are registered, the model quota is confirmed and rg-answer-scorer-demo does not exist yet.
+
+    How to work:
+    - Start by checking the clock with date and reading the wave targets in plan.md. If you are more than two hours behind a target, apply "Cut if behind".
+    - Hooks, project settings and MCP servers that S0 creates will not be loaded in this session. Prove hooks with their unit tests, and use web fetch on learn.microsoft.com for Azure documentation.
+    - If an action is denied, retry it once at most, record it under "Needs owner" in the Status section of plan.md and move on to other work.
+    - Verify before you claim: run the checks, read the output, and report anything that failed or was skipped as it is.
+    - Do not end your turn while work remains. After any context compaction, re-read CLAUDE.md, the Status section of plan.md and the Phase 2 rules.
+
+    Stop when everything you can do without me is done, or at 09:00 on Wednesday 14 October at the latest, or if you hit a usage limit. Whichever comes first, update Status and finish with the BUILD REPORT that Phase 2 section F describes.
+    ```
 
 ---
 
