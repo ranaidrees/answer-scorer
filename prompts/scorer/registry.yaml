@@ -2,6 +2,7 @@
 # `active` is the committed prompt version. SCORER_PROMPT_VERSION overrides it only when set.
 # `sha256` holds the SHA-256 of every prompt file (UTF-8 text, LF line endings).
 # A prompt file never changes in place: a changed prompt is a new file and a new entry.
-active: v1
+active: v0-weak
 sha256:
   v1: 234ee79884a66dba389afa518e85ffadde55d103339d1410632179d4e44288fe
+  v0-weak: 82115ffcdc8c18c91cf8abf425f5ad5d904784db956df2a5ea2137b10a1b7ca8
