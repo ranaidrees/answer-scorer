@@ -14,7 +14,9 @@ Both labellers are the same model family as each other, and a different family f
 - Audit rule (spec section 7): same label, kept; off by 1, the lead decides with a one-line reason; off by 2 or more, the answer is rewritten and audited again.
 - No disagreement, so no label was changed, no answer was rewritten and the lead made no off-by-1 decision.
 
-Full agreement on 30 answers is weaker evidence than it looks: each rubric carries an explicit level rule, the generator wrote each answer to meet that rule, and the auditor applied the same rule. It says the rule is clear enough to be applied the same way twice. It is also a sign that the golden set may be easier than real answers, which the eval card states as a limitation.
+Full agreement on 30 answers is weaker evidence than it looks: each rubric carries an explicit level rule, the generator wrote each answer to meet that rule, and the auditor applied the same rule. It says the rule is clear enough to be applied the same way twice. It is also a sign that the golden set may be easier than real answers, which the eval card must state as a limitation.
+
+A second check, by the independent reviewer of this pull request, also labelled all 30 answers from shuffled neutral ids before reading the labels, and agreed on all 30. The same caveat applies.
 
 ## Every answer
 
