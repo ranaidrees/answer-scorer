@@ -1,6 +1,6 @@
 # Spec: AI answer scorer with a trust harness
 
-- **Status:** draft for owner acceptance (revised after independent review; see `CHANGELOG.md`)
+- **Status:** accepted for build on 13 October 2026 by the validation session (plan V), under the owner's delegation: quota confirmed, rubrics written and independently checked, section 13 decisions recorded in `intent/decisions.md`. The owner's own acceptance is the merge of this file. (Revised after independent review; see `CHANGELOG.md`.)
 - **Reads:** `intent/intent.md`
 - **Read next:** `intent/plan.md`
 - **Stage:** 2 of 6 (Design)

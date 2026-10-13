@@ -230,25 +230,42 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Tuesday 13 October 2026, 17:00 (unattended build, Phase 2).
+Last updated: Tuesday 13 October 2026, 18:00 (unattended build, Phase 2).
 
-**Merged:** nothing yet beyond the intent commits.
+**Merged to `main`:** nothing beyond the intent commits. No pull request can be merged until the owner changes one GitHub setting (first item under "Needs owner", decision D19). Work continues as a stack of open pull requests, each based on the one before it.
 
-**In progress:** W0. S0 harness on branch `s0-harness`.
+**The stack (bottom first):**
+
+| # | Branch | Slice | Base | State |
+|---|---|---|---|---|
+| 2 | `s0-harness` | S0 delivery harness | `main` | `ci` green; verifier PASS on the fourth run (qualified, see the pull request); ready to merge |
+| 3 | `claude-workflows` | Claude workflows (replaces #1) | `s0-harness` | open |
+| next | `v-rubrics` | V design validation | `claude-workflows` | this branch |
+
+**In progress:** W0 closing with V. S1 (Azure bootstrap) is running in its own worktree (decision D21).
 
 **Done outside git (W0):**
-- Secret scanning with push protection, Dependabot alerts and approval for fork PR workflows from all outside contributors are on (checked with read-only `gh api` calls).
+- Secret scanning with push protection, Dependabot alerts and approval for fork PR workflows from all outside contributors are on.
 - Model quota re-checked: UK South has 1,000 with 0 used (decision D1).
+- Ruleset `main`: pull request required, required check `ci`, force pushes and deletion blocked, empty bypass list, squash merges only. Read back with `gh api`.
+- Environment `demo`: the owner is the required reviewer, deployments from `main` only. Read back with `gh api`.
 
-**Next:** merge S0; switch on CodeQL default setup (decision D4); update and merge the GitHub app PR; ruleset on `main` and the `demo` environment; V.
+**Not done, waiting for `main` to move:** CodeQL default setup (GitHub refuses it until Python and workflow files are on the default branch, decision D4).
 
-**Hooks:** proven by unit tests (decision D11). They also loaded in the build session as soon as `.claude/settings.json` existed, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The first verifier run on S0 returned FAIL for fail-open shapes in the gate; they were fixed with tests (decision D13). The full live proof in a fresh session stays a Phase 3 step.
+**Hooks:** proven by unit tests (decision D11). They also loaded in the build session as soon as `.claude/settings.json` existed, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The verifier returned FAIL on S0 three times for fail-open shapes in the gate; each was fixed with tests (decisions D13, D17, D18). The full live proof in a fresh session stays a Phase 3 step.
 
 **Model spend estimate:** 0.00 GBP so far (no model calls yet). One nightly run: not yet measured.
 
-**Needs owner:** nothing yet.
+**Needs owner (in this order):**
+
+1. **Turn on email privacy, then let the stack merge.** In GitHub, Settings, Emails: tick "Keep my email addresses private" and "Block command line pushes that expose my email". Until then every merge made by GitHub would put the account's private email address into a public commit, so the agent merges nothing (decision D19). After that, in Phase 3, the lead merges the stack from the bottom up: squash-merge the lowest pull request, bring the next one up to date with `main`, wait for `ci`, and repeat.
+2. **Pull request #1.** Close it without merging and delete its branch. Its two commits carry the same private email address in their metadata (decision D20). Closing does not remove them from GitHub; only GitHub Support can do that, and whether to ask is the owner's call.
+3. **Denied action, for the record.** Auto mode denied one command as a CI bypass: creating an integration branch `stack`, pointing pull request #2 at it and pushing a local merge commit there, so that pull requests could land without a GitHub-made merge. It was not retried and nothing from it ran. No action needed unless the owner prefers that route to item 1.
 
 ## Deviations
 
 - No separate `plan/wave-N` pull requests in the unattended build (decision D12).
 - Branches are never force pushed, so a pushed branch is brought up to date by merging `main` rather than rebasing (decision D9).
+- **Nothing is merged in the unattended build** (decision D19). "How every slice runs" step 5 becomes: the lead opens the pull request on top of the stack and leaves it open, green and verified. Everything that needs `main` to move is deferred to Phase 3: CodeQL default setup, `evals` as a required check on `main`, the weak-prompt pull request showing a blocked merge, the nightly schedule taking effect, and the first deploy being queued.
+- Pull request #1 was replaced rather than updated and merged (decision D20).
+- S1 started before W0 closed (decision D21).

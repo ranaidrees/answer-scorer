@@ -1,0 +1,42 @@
+# Generic competency rubric. Synthetic, written for this reference implementation.
+# Descriptors are observable behaviours the candidate describes in the answer.
+# Writing style, length, names and life details are never evidence.
+id: problem_solving
+name: Problem Solving
+definition: >-
+  Understands a problem before acting: gathers information, finds the cause, weighs
+  options, chooses and carries out a solution, and checks that it worked.
+  Assign the highest level from 3 to 5 whose descriptors are all met. If level 3 is not
+  met, assign 2 where the candidate describes an action of their own in a relevant
+  example, otherwise 1. The descriptors at levels 1 and 2 describe typical answers;
+  where they conflict with this rule, the rule decides.
+levels:
+  - level: 1
+    label: Limited
+    descriptors:
+      - Does not answer the question, or gives only general statements or a list of qualities with no specific situation.
+      - "Describes no action of their own: nothing was done, or someone else solved the problem."
+  - level: 2
+    label: Developing
+    descriptors:
+      - Describes a problem and an action of their own, but the action is the first idea tried, with no reasoning about the cause.
+      - Considers no alternative to the action taken.
+      - Does not check whether the action worked, or leaves the result vague.
+  - level: 3
+    label: Competent
+    descriptors:
+      - Describes a specific problem and how they gathered information to understand it.
+      - States a cause and gives a reason linking the chosen action to it.
+      - States the result of the action.
+  - level: 4
+    label: Strong
+    descriptors:
+      - Describes breaking the problem down or testing possible causes one at a time to find the cause.
+      - Compares at least two options and explains the trade-off behind the choice.
+      - States how they checked the result.
+  - level: 5
+    label: Exceptional
+    descriptors:
+      - Describes ruling out at least one named possible cause, stating the evidence used.
+      - Names the criteria used to choose between options, including a risk or an effect on other people.
+      - States what was checked to confirm the result, and a step taken to stop the problem recurring.
