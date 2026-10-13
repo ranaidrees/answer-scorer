@@ -5,7 +5,7 @@
 # uv comes from its official image, pinned to an exact version.
 FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
 
-FROM python:3.12.15-slim-trixie
+FROM python:3.15.0rc3-slim-trixie
 
 # uv settings for the build: compile bytecode once, copy files instead of linking,
 # keep no cache in the image, and never download another Python.
