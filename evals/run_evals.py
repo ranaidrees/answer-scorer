@@ -692,7 +692,7 @@ def build_report(
         },
         "inference": {
             "model_deployment": settings.model_deployment,
-            "model_version": ", ".join(versions) or settings.model_version,
+            "model_version": ",".join(versions) or settings.model_version,
             "prompt_version": prompt.version,
             "prompt_sha256": prompt.sha256,
             **FIXED_INFERENCE,
