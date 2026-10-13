@@ -1,0 +1,201 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Answer scorer dashboard\n\nFour tiles for the scoring service: requests and latency, the human-review rate by reason, tokens and estimated cost, and eval results per run. Everything here is metadata: counts, flags, timings and identifiers. No candidate text is recorded, so none can be shown.\n\nThe queries are kept in `dashboards/queries.kql` in the repository, and the SLOs are described in `docs/slo.md`."
+      },
+      "name": "introduction"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "a0000000-0000-4000-8000-000000000001",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 1800000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ],
+              "allowCustom": true
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            },
+            "value": {
+              "durationMs": 86400000
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "time range"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 1. Requests, failures and latency against the 6 s SLO\n\nRequests to `POST /api/score`. A 4xx (wrong token, rate limit, input that cannot be scored) is the caller's side and is left out of the failure rate. Latency is measured on completed requests. The first request after the app has scaled to zero is slow by design; the SLO is for a warm replica."
+      },
+      "name": "tile 1 heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where name == \"POST /api/score\"\n| extend status = toint(resultCode)\n| summarize\n    requests = count(),\n    completed_200 = countif(status == 200),\n    client_errors_4xx = countif(status >= 400 and status < 500),\n    counted_non_4xx = countif(status < 400 or status >= 500),\n    failures_5xx = countif(status >= 500),\n    p50_ms = percentile(iff(status == 200, duration, real(null)), 50),\n    p95_ms = percentile(iff(status == 200, duration, real(null)), 95)\n| where requests > 0\n| extend availability = iff(counted_non_4xx == 0, real(null), 100.0 * (counted_non_4xx - failures_5xx) / counted_non_4xx)\n| project\n    requests,\n    completed_200,\n    client_errors_4xx,\n    failures_5xx,\n    failure_rate_pct = round(100.0 - availability, 2),\n    availability_pct = round(availability, 2),\n    availability_slo = case(isnull(availability), \"no data\", availability >= 99.0, \"met (99% or more)\", \"missed (under 99%)\"),\n    p50_s = round(p50_ms / 1000.0, 2),\n    p95_s = round(p95_ms / 1000.0, 2),\n    slo_p95_s = 6.0,\n    latency_slo = case(isnull(p95_ms), \"no data\", p95_ms <= 6000, \"met (6 s or less)\", \"missed (over 6 s)\")",
+        "size": 4,
+        "title": "Requests, failure rate, availability, p50 and p95 latency (SLO: p95 at or under 6 s, 99% of non-4xx requests succeed)",
+        "noDataMessage": "No requests to POST /api/score in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "name": "tile 1 table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where name == \"POST /api/score\" and toint(resultCode) == 200\n| summarize\n    p50_s = round(percentile(duration, 50) / 1000.0, 2),\n    p95_s = round(percentile(duration, 95) / 1000.0, 2)\n    by bin(timestamp, 5m)\n| extend slo_p95_s = 6.0\n| project timestamp, p50_s, p95_s, slo_p95_s\n| order by timestamp asc",
+        "size": 0,
+        "title": "p50 and p95 latency in seconds, 5-minute bins, with the 6 s SLO line",
+        "noDataMessage": "No completed requests in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart",
+        "chartSettings": {
+          "showLegend": true,
+          "showDataPoints": true,
+          "ySettings": {
+            "min": 0
+          }
+        }
+      },
+      "name": "tile 1 chart"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 2. Human-review rate by reason (online evaluation)\n\nShare of scored requests sent to a person, by reason. One answer can have several reasons. The **control-triggered** rate counts an answer once when it has any reason other than the adverse-score rule alone, and is read against the **25% band for live traffic**. That band is not the 15% gate in CI, which is the same rate measured on the golden set (see tile 4)."
+      },
+      "name": "tile 2 heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let scored = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend reasons_text = tostring(customDimensions[\"scorer.review_reasons\"])\n    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, \",\"))\n    | extend\n        needs_review = tolower(tostring(customDimensions[\"scorer.needs_human_review\"])) == \"true\",\n        control_triggered = array_length(set_difference(reason_list, dynamic([\"adverse_score\"]))) > 0;\nlet total = toscalar(scored | count);\nlet known_reasons = datatable(row_order: int, reason: string) [\n    1, \"injection_detected\",\n    2, \"hidden_text_removed\",\n    3, \"platform_guardrail\",\n    4, \"ungrounded_quote\",\n    5, \"inconsistent\",\n    6, \"off_topic\",\n    7, \"rationale_protected_term\",\n    8, \"adverse_score\"\n];\nlet by_reason = scored\n    | mv-expand reason = reason_list to typeof(string)\n    | summarize reviews = count() by reason;\nlet reason_rows = known_reasons\n    | join kind=fullouter by_reason on reason\n    | project\n        row_order = toint(coalesce(row_order, int(9))),\n        measure = coalesce(reason, reason1),\n        reviews = tolong(coalesce(reviews, long(0)));\nlet summary_rows = scored\n    | summarize control = countif(control_triggered), any_reason = countif(needs_review)\n    | extend rows = pack_array(\n        pack(\"row_order\", 10, \"measure\", \"control-triggered (any reason other than adverse_score alone)\", \"reviews\", control),\n        pack(\"row_order\", 11, \"measure\", \"any review\", \"reviews\", any_reason))\n    | mv-expand rows\n    | project\n        row_order = toint(rows.row_order),\n        measure = tostring(rows.measure),\n        reviews = tolong(rows.reviews);\nunion reason_rows, summary_rows\n| where total > 0\n| extend scored_requests = total\n| extend rate = 100.0 * reviews / scored_requests\n| extend band = case(\n    row_order != 10, \"\",\n    rate <= 25.0, \"inside the 25% band\",\n    \"over the 25% band\")\n| order by row_order asc\n| project measure, reviews, scored_requests, rate_pct = round(rate, 1), band",
+        "size": 3,
+        "title": "Reviews by reason over the whole time range, with the control-triggered rate against the 25% band",
+        "noDataMessage": "No scored requests in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "name": "tile 2 table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let scored = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend reasons_text = tostring(customDimensions[\"scorer.review_reasons\"])\n    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, \",\"))\n    | extend control_triggered = array_length(set_difference(reason_list, dynamic([\"adverse_score\"]))) > 0;\nlet totals = scored\n    | summarize scored_requests = count() by bin(timestamp, 5m);\nlet by_reason = scored\n    | mv-expand reason = reason_list to typeof(string)\n    | summarize reviews = count() by bin(timestamp, 5m), series = reason;\nlet control = scored\n    | summarize reviews = countif(control_triggered) by bin(timestamp, 5m)\n    | extend series = \"control-triggered\";\nlet band = totals\n    | project timestamp, series = \"25% band\", rate_pct = 25.0;\nunion by_reason, control\n| join kind=inner totals on timestamp\n| project timestamp, series, rate_pct = round(100.0 * reviews / scored_requests, 1)\n| union band\n| order by timestamp asc, series asc",
+        "size": 0,
+        "title": "Review rate by reason over time (% of scored requests, 5-minute bins), with the control-triggered rate and the 25% band",
+        "noDataMessage": "No scored requests in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart",
+        "chartSettings": {
+          "showLegend": true,
+          "showDataPoints": true,
+          "ySettings": {
+            "min": 0
+          }
+        }
+      },
+      "name": "tile 2 chart"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 3. Tokens and estimated cost per score\n\nOne score is three model calls; the token counts are the sum of the three. **The cost is an estimate**: tokens multiplied by the published prices in `config/prices.yaml`, with every input token at the full input price. It is never the invoice."
+      },
+      "name": "tile 3 heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let recorded = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend\n        competency = tostring(customDimensions[\"scorer.competency\"]),\n        has_score = isnotempty(tostring(customDimensions[\"scorer.score\"])),\n        tokens_in = tolong(customDimensions[\"scorer.tokens_in\"]),\n        tokens_out = tolong(customDimensions[\"scorer.tokens_out\"]),\n        cost_gbp = todouble(customDimensions[\"scorer.cost_estimate_gbp\"]);\nunion\n    (recorded | extend row_order = 1),\n    (recorded | extend row_order = 2, competency = \"all\")\n| summarize\n    scores = countif(has_score),\n    blocked_no_score = countif(not(has_score)),\n    tokens_in_per_score = round(avgif(tokens_in, has_score)),\n    tokens_out_per_score = round(avgif(tokens_out, has_score)),\n    estimated_cost_per_score_gbp = round(avgif(cost_gbp, has_score), 5),\n    tokens_in_total = sum(tokens_in),\n    tokens_out_total = sum(tokens_out),\n    estimated_cost_total_gbp = round(sum(cost_gbp), 4)\n    by row_order, competency\n| order by row_order asc, competency asc\n| project-away row_order",
+        "size": 4,
+        "title": "Tokens and estimated cost per score in GBP (an estimate from published prices, not the invoice)",
+        "noDataMessage": "No scored requests in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "name": "tile 3 table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 4. Eval results per run\n\nOne row per full eval run against the live model, from the `eval_run` events sent by CI. `run_type` splits pull request runs from nightly and manual ones. The `golden_control_review_rate` column is the rate the **15% CI gate** applies to: the golden set, not live traffic."
+      },
+      "name": "tile 4 heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where name == \"eval_run\"\n| extend trigger_name = tostring(customDimensions[\"trigger\"])\n| project\n    timestamp,\n    run_type = case(\n        trigger_name == \"pull_request\", \"pull request\",\n        trigger_name == \"schedule\", \"nightly\",\n        trigger_name == \"workflow_dispatch\", \"manual\",\n        trigger_name),\n    gate = iff(tolower(tostring(customDimensions[\"passed\"])) == \"true\", \"PASS\", \"FAIL\"),\n    qwk = round(todouble(customDimensions[\"golden_qwk\"]), 3),\n    exact_agreement = round(todouble(customDimensions[\"golden_exact\"]), 3),\n    within_1_agreement = round(todouble(customDimensions[\"golden_within_1\"]), 3),\n    golden_control_review_rate = round(todouble(customDimensions[\"golden_control_review_rate\"]), 3),\n    breached = tostring(customDimensions[\"breached\"]),\n    prompt_version = tostring(customDimensions[\"prompt_version\"]),\n    git_sha = substring(tostring(customDimensions[\"git_sha\"]), 0, 7),\n    model_calls = tolong(customDimensions[\"model_calls\"])\n| order by timestamp desc",
+        "size": 3,
+        "title": "Eval runs: quadratic weighted kappa, agreement and gate result, by pull request, nightly or manual run",
+        "noDataMessage": "No eval run was recorded in this time range. Widen the time range: runs happen on pull requests and nightly.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "name": "tile 4 table"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
