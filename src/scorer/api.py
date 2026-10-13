@@ -229,6 +229,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        # Fail fast (FR-2): a rubric or prompt that does not load stops the server at
+        # start-up, before it takes a request. /readyz repeats the check while it runs.
+        load_all_rubrics(settings)
+        load_prompt(settings)
         warm = getattr(model_client, "warm", None)
         warming = asyncio.create_task(_warm(warm)) if callable(warm) else None
         yield

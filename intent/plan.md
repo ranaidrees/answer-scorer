@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Tuesday 13 October 2026, 22:40 (Phase 2, a second lead session took over from the first; the owner was present and asked for the stack to be merged).
+Last updated: Tuesday 13 October 2026, 23:50 (end of Phase 2. A second lead session took over from the first; the owner was present, asked for the stack to be merged and accepted decision S4c-8).
 
 **Merged to `main`, in this order, each a squash merge with the owner's no-reply address as author:**
 
@@ -243,19 +243,22 @@ Last updated: Tuesday 13 October 2026, 22:40 (Phase 2, a second lead session too
 | 6 | S4a datasets and label audit | audit agreement 30 of 30; two record gaps found by the CI review, fixed before merge |
 | 7 | S2 scorer core | the CI review skipped itself because this diff edits the review workflow; in-session review stands |
 | 8 | S3 live model, API, page, telemetry | CI review: no Important findings |
-| 9 | S4b eval runner and `evals` workflow | merged with CI review findings open; fixed in this pull request (see Deviations) |
-| 10 | S5a Dockerfile and deploy workflow | merged with one finding open; fixed in this pull request. Its merge queued a deploy run that must not be approved |
-| 11 | S6 observability | merged with one record finding open; this Status is that record |
+| 9 | S4b eval runner and `evals` workflow | merged with CI review findings open; fixed in #13 (see Deviations) |
+| 10 | S5a Dockerfile and deploy workflow | merged with one finding open; fixed in #13. Its merge queued a deploy run that must not be approved |
+| 11 | S6 observability | merged with one record finding open; the Status in #13 was that record |
+| 13 | S4c baseline, stability proof and the review fixes for S3, S4b and S5a | verifier PASS; live `evals` gate PASS twice; the one Important finding (S4c-8) accepted by the owner (S4c-14) |
 
-Pull request #1 is still open for the owner to close. #3 is closed, not merged.
+Pull request #1 is still open for the owner to close. #3 is closed, not merged. Dependabot opened #14 (a base image bump to a release candidate); it is open and untouched, for the owner.
 
-**This branch (`s4-evals`, S4c):** the review fixes for S3, S4b and S5a (decisions F-1 to F-14), the baseline, the question-echo check, the eval runner's retries and their cap, the stability proof and its records. **Next:** the weak-prompt pull request (stays open, shows a blocked merge), dashboard traffic, then S8 (demo pack and final verification).
+**Open by design:** #15, the weak-prompt demonstration. `ci` passes, the required `evals` check fails (ungrounded quotes 334 of 334, control-triggered review rate 30 of 30, edge cases 5 of 6) and GitHub reports the merge as blocked. It is never merged.
 
-**Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of 8 live runs (S4c-12).
+**This branch (`s8-demo-pack`, S8):** the README with its scoreboard, the governance note, the eval card, the walkthrough, the screenshot list (no screenshot taken yet) and the final verification checklist in `docs/verification.md`. **Next:** Phase 3 (deploy, live proof of the hooks, screenshots, the owner's acceptance).
+
+**Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt has passed nine of its ten full runs.
 
 **Done outside git:**
 - Secret scanning with push protection, Dependabot alerts and approval for fork PR workflows from all outside contributors are on.
-- Ruleset `main`: pull request required, required check `ci`, force pushes and deletion blocked, empty bypass list, squash merges only. `evals` is added as a required check once this pull request is merged.
+- Ruleset `main`: pull request required, required check `ci`, force pushes and deletion blocked, empty bypass list, squash merges only. `evals` was added as a second required check after #13 merged, and read back.
 - Environment `demo`: the owner is the required reviewer, deployments from `main` only.
 - Azure, in `rg-answer-scorer-demo` (UK South): Foundry resource with key auth disabled and one project; deployment `scorer-mini` (gpt-5.4-mini 2026-03-17, Global Standard, capacity 100, no auto-upgrade, default guardrail bound); Log Analytics with a 0.1 GB daily cap; Application Insights connected to the project; Container Apps environment and app (scale 0 to 2, placeholder image); identities `id-app`, `id-deploy`, `id-eval` with the roles and federated subjects in spec section 9; budget 10 with alerts at 50, 80 and 100 percent; from S6, a workbook, an action group and two alert rules. No resource with a fixed hourly charge; the two alert rules cost about 0.75 GBP a month between them (see Deviations).
 - GitHub: the identifiers the workflows sign in with are repository secrets (they were repository variables until the S5a review found that variables are printed in logs; the variables are deleted); the Application Insights connection string secret; the `DEMO_TOKEN` secret on `demo`.
@@ -265,11 +268,12 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged.
 
 **Hooks:** proven by unit tests (decision D11). They also loaded in the build sessions, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The verifier returned FAIL on S0 three times for fail-open shapes in the gate; each was fixed with tests (decisions D13, D17, D18). The full live proof in a fresh session stays a Phase 3 step.
 
-**Model spend estimate (from token counts; Azure's own figures lag): about 4.6 GBP.** Proof and smoke calls 0.05; the CI baseline run 0.43; seven full local runs on `v1` and one that stopped early 3.04; three weak-prompt runs 0.99; one duplicate weak run started by mistake by the second lead and stopped at about 20 of 92 inputs, about 0.08. Still to come in Phase 2: one CI gate run on this pull request (about 0.43), one on the weak-prompt pull request (about 0.33); dashboard traffic from the local app is done (42 requests, about 0.18). That gives about 5.5 GBP. Phase 3 is estimated at 1 GBP. **One nightly run costs about 0.43 GBP.** The estimate was under 7 GBP when the proof was done, so the nightly schedule stays in `evals.yml`; at that price about eight nights fit under the 10 GBP limit after Phase 3, so the owner should switch the schedule off after the walkthrough (see "Needs owner").
+**Model spend estimate (from token counts; Azure's own figures lag): about 6 GBP.** Proof and smoke calls 0.05; the CI baseline run 0.43; seven full local runs on `v1` and one that stopped early 3.04; three weak-prompt runs 0.99; one duplicate weak run started by mistake by the second lead and stopped at about 20 of 92 inputs, about 0.08. Dashboard traffic from the local app, 42 requests, 0.19; two CI gate runs on #13, about 0.86; one CI gate run on #15, 0.33. Phase 3 is estimated at 1 GBP. **One nightly run costs about 0.43 GBP.** The estimate was under 7 GBP when the proof was done, so the nightly schedule stays in `evals.yml`; at that price about seven nights fit under the 10 GBP limit after Phase 3 and the owner should switch the schedule off after the walkthrough (see "Needs owner").
 
 **To confirm on the first deploy (Phase 3):** the context part of the OIDC subjects; whether `id-deploy` can update the app with its role scoped to the app only (the role includes a join action on the environment, which that scope does not cover); whether the public `ghcr.io` image pulls without a registry entry.
 
 **Not met yet:**
+- **Dashboard:** traffic was sent from the local app (42 of 42 requests returned 200). Run with the read-only CLI, the queries behind all four tiles return data: p95 latency 3.3 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 9 of 41 (inside the 25% band, on a mix with a deliberate burst of injected answers), and two CI eval runs. Nobody has looked at the workbook in the portal.
 - The test alert has not reached email: the address on action group `ag-answer-scorer-email` awaits the owner's confirmation.
 - The deployed availability alert and workbook hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
 - Screenshots for the demo pack, and anything that needs the live URL, are pending Phase 3.
@@ -277,10 +281,10 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged.
 
 **Needs owner (in this order):**
 
-1. **Do not approve the deploy run that the merge of #10 queued** ("S5a: Dockerfile, image build and deploy workflow (#10)"). It comes from the workflow that still read the deleted variables and would stop at sign-in. Approve only the newest waiting run, after this pull request and S8 are merged, and after item 2.
+1. **Approve only the newest waiting deploy run, and only after item 2.** The runs queued by the merges of #10 and #11 come from the workflow that still read the deleted variables and would stop at sign-in: do not approve those. The merge of #13 queued a run from the corrected workflow, and the merge of S8 will queue the newest.
 2. **Make the `ghcr.io` package public**, then approve the newest waiting `demo` deployment (Phase 3).
 3. **CodeQL default setup.** Auto mode denied the one `gh api` call that switches it on (a repository setting). It was not retried. Switch it on in Settings, Code security, or tell the lead to.
-4. **Pull request #1.** Close it without merging and delete its branch (decision D20; the reason is in the build report).
+4. **Pull request #1.** Close it without merging and delete its branch (decision D20; the reason is in the build report). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
 5. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
 6. **Confirm the alert email address** in the message Azure sent, then the lead re-sends the test notification.
 7. **The nightly eval schedule** costs about 0.43 GBP a night. Switch it off after the walkthrough, or accept the spend.
@@ -293,7 +297,7 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged.
 - No separate `plan/wave-N` pull requests in the unattended build (decision D12).
 - Branches are never force pushed, so a pushed branch is brought up to date by merging rather than rebasing (decision D9). Review findings on a branch lower in the stack are fixed on the branch at the top.
 - **The stack was merged late and in one go.** Nothing was merged until the owner turned on email privacy (decision D19). Then #2 to #11 were merged bottom-up in about an hour, each once `ci` passed, with `main` merged into the next branch each time. Each merge was checked to be the branch plus exactly what `main` had gained.
-- **Three pull requests were merged with CI review findings open** (#9, #10, #11), because their fixes were already written on this branch at the top of the stack and pushed branches are not rewritten. Between those merges and this one, `main` holds an eval gate with no minimum n, workflows that read deleted variables (so `evals` and the deploy stop at sign-in) and a stale Status. The disposition is recorded as a comment on each of the three.
+- **Three pull requests were merged with CI review findings open** (#9, #10, #11), because their fixes were already written on the S4c branch at the top of the stack and pushed branches are not rewritten. Between those merges and the merge of #13, `main` held an eval gate with no minimum n, workflows that read deleted variables (so `evals` and the deploy stop at sign-in) and a stale Status. The disposition is recorded as a comment on each of the three.
 - **#3 was replaced by #12.** Deleting a merged base branch closed the pull request stacked on it. From then on the next pull request was retargeted to `main` before the merged branch was deleted.
 - **The CI Claude review was replaced by an in-session review against `REVIEW.md`** until its workflow was on `main` (decision D25). After that the CI review ran on each pull request as `main` was merged in, except #7.
 - Pull request #1 was replaced rather than updated and merged (decision D20).
@@ -304,3 +308,4 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged.
 - **S6: two alert rules cost about 0.75 GBP a month in total.** This is a small fixed charge, against the rule of no fixed charges; it is kept because the spec asks for the alerts, and it is listed here so the owner can remove them after the walkthrough.
 - Three early eval reports cite commit `a6915ca`, which a rebase of the then unpushed branch replaced (decision S4c-13).
 - Screenshots for the demo pack are pending Phase 3.
+- **S8 changed scorer code.** The final verification found that FR-2's start-up validation was missing; the fix (four lines in `src/scorer/api.py` and three tests) is in the S8 pull request although the plan's file list for S8 names documents only (decision S8-9). The verifier then returned FAIL on the demo pack for two statements the reports contradicted; they were corrected and the verifier was not run again (decision S8-10).
