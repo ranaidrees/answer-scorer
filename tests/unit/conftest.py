@@ -24,3 +24,13 @@ def scorer_root(tmp_path: Path) -> Path:
     shutil.copytree(REPO_ROOT / "rubrics", root / "rubrics")
     shutil.copytree(REPO_ROOT / "prompts", root / "prompts")
     return root
+
+
+@pytest.fixture(autouse=True)
+def _no_waiting_between_eval_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The eval runner waits before trying a failed input again; tests do not wait."""
+    try:
+        import evals.run_evals as run_evals
+    except ImportError:
+        return
+    monkeypatch.setattr(run_evals, "ITEM_RETRY_WAITS", (0.0, 0.0))

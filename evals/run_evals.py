@@ -33,7 +33,7 @@ import re
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -390,6 +390,12 @@ async def score_item(item: EvalItem, client: ModelClient, settings: Settings) ->
     return result
 
 
+# A full run is about 270 calls over eight minutes; one transient model failure should not
+# throw it all away. An input is tried at most this many times, waiting between attempts.
+ITEM_ATTEMPTS = 3
+ITEM_RETRY_WAITS: tuple[float, ...] = (10.0, 30.0)
+
+
 class _Pacer:
     """Starts at most `per_minute` inputs a minute. Zero means no limit."""
 
@@ -416,12 +422,19 @@ async def run_items(
     concurrency: int = DEFAULT_CONCURRENCY,
     per_minute: float = 0.0,
     progress: Callable[[int, int], None] | None = None,
+    retried: list[str] | None = None,
+    retry_waits: Sequence[float] | None = None,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> list[dict]:
     """Score every input, at most `concurrency` at a time, in the order given.
 
-    The first failure stops the run: no new input is started, and `EvalRunError` names the
+    An input the model could not score is tried again, up to `ITEM_ATTEMPTS` times with a
+    wait in between, and its id is appended to `retried` once per extra attempt. If it still
+    cannot be scored the run stops: no new input is started, and `EvalRunError` names the
     input that failed. No result is ever filled in for an input the model did not score.
     """
+    retried = retried if retried is not None else []
+    retry_waits = ITEM_RETRY_WAITS if retry_waits is None else retry_waits
     results: list[dict | None] = [None] * len(items)
     pending = iter(enumerate(items))
     failures: list[tuple[EvalItem, BaseException]] = []
@@ -434,11 +447,23 @@ async def run_items(
             if failures:
                 return
             await pacer.wait()
-            try:
-                results[index] = await score_item(item, client_for(item), settings)
-            except Exception as error:
-                failures.append((item, error))
-                return
+            for attempt in range(1, ITEM_ATTEMPTS + 1):
+                try:
+                    result = await score_item(item, client_for(item), settings)
+                except ModelUnavailableError as error:
+                    # A model failure gives no score, so trying the same input again is not
+                    # choosing between scores. Every attempt is counted in the report.
+                    if attempt == ITEM_ATTEMPTS:
+                        failures.append((item, error))
+                        return
+                    retried.append(item.item_id)
+                    await sleep(retry_waits[min(attempt, len(retry_waits)) - 1])
+                    continue
+                except Exception as error:
+                    failures.append((item, error))
+                    return
+                results[index] = result
+                break
             done += 1
             if progress:
                 progress(done, len(items))
@@ -748,6 +773,7 @@ async def _score_all(
     settings: Settings,
     client_name: str,
     client_factory: ClientFactory | None,
+    retried: list[str],
 ) -> list[dict]:
     shared = None
     if client_name != LIVE:
@@ -766,6 +792,7 @@ async def _score_all(
             concurrency=args.concurrency,
             per_minute=per_minute,
             progress=_progress,
+            retried=retried,
         )
     finally:
         if shared is not None:
@@ -792,7 +819,10 @@ def main(argv: Sequence[str] | None = None, *, client_factory: ClientFactory | N
         print(f"Inputs: {len(items)}, about {RUNS * len(items)} model calls at most", flush=True)
 
         started = time.monotonic()
-        results = asyncio.run(_score_all(args, items, settings, client_name, client_factory))
+        retried: list[str] = []
+        results = asyncio.run(
+            _score_all(args, items, settings, client_name, client_factory, retried)
+        )
         report = build_report(
             results=results,
             # Only a full run is a gate result, so only a full run must hold every size.
@@ -808,6 +838,13 @@ def main(argv: Sequence[str] | None = None, *, client_factory: ClientFactory | N
             concurrency=args.concurrency,
             duration_seconds=time.monotonic() - started,
         )
+        # Inputs the model could not score at first and that were tried again (ids only).
+        report["run"]["retried_inputs"] = sorted(retried)
+        if retried:
+            print(
+                f"Inputs tried again after the model was unavailable: {len(retried)} "
+                f"attempt(s) on {len(set(retried))} input(s). No score was reused or invented."
+            )
         markdown_path, json_path = write_report(report, args.reports_dir)
     except EvalRunError as error:
         message = f"The eval run did not finish: {error}. No report was written and no score was invented."
