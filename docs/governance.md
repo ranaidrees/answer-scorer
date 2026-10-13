@@ -15,7 +15,7 @@ The demo runs on synthetic data and is not for use in real hiring decisions. Its
 
 ## 2. Provider requirements: Articles 9 to 15
 
-Articles 9 to 15 are requirements on the system that the **provider** must meet (Article 16). The table gives the demo control for each and where to see it. "Tile" means a tile of the dashboard workbook, whose queries are in [dashboards/queries.kql](../dashboards/queries.kql) and whose layout is in [infra/workbook.json](../infra/workbook.json); the dashboard itself is pending live.
+Articles 9 to 15 are requirements on the system that the **provider** must meet (Article 16). The table gives the demo control for each and where to see it. "Tile" means a tile of the dashboard workbook, whose queries are in [dashboards/queries.kql](../dashboards/queries.kql) and whose layout is in [infra/workbook.json](../infra/workbook.json); the four tile queries return data when run with the read-only CLI against telemetry from the app run locally, but nobody has looked at the workbook in the portal yet, and the dashboard on traffic from the deployed application is pending live.
 
 | Requirement area | Demo control | Where to see it |
 |---|---|---|
@@ -37,9 +37,9 @@ Three supporting controls sit under more than one row:
 
 - The agreement figures are measured against labels that Claude wrote and Claude audited. They show consistency with those labels, not accuracy against trained raters.
 - The fairness evidence is 16 counterfactual pairs of synthetic text. It is a regression check on the scorer, not an adverse impact analysis.
-- The gate's stability proof on the accepted prompt is three consecutive passing runs on one commit, reached at the third attempt (decision S4c-7). The first attempt ended in a failed run and the second in a stopped run; both were fixed in code, and no threshold, dataset, rubric or prompt changed. The [eval card](eval_card.md#stability-proof) tells it in full. The weak-prompt half is [[PENDING: result of the three weak-prompt runs, with the decision ID that records them]].
-- The fairness gates can be breached by model noise alone. The identity-pair mean sat exactly on its limit in two of eight live runs, and the build's lead session estimates that roughly 1 full run in 20 would breach a pair gate with no change to the system. That is an estimate from eight runs, not a measured rate; a production gate would use more pairs.
-- Record-keeping is proven on local runs against the live model (decision S3-13). On the deployed application it is pending live, and so is the review rate on live traffic.
+- The gate's stability proof on the accepted prompt is three consecutive passing runs on one commit, reached at the third attempt (decision S4c-7). The first attempt ended in a failed run and the second in a stopped run; both were fixed in code, and no threshold, dataset, rubric or prompt changed. The [eval card](eval_card.md#stability-proof) tells it in full. The weak-prompt half is three consecutive failing runs on one commit (decision S4c-11): each breached the ungrounded quote rate (every quote, 332 or 333 of them) and the control-triggered review rate (30 of 30), and two of the three also breached an injection pair gate. The weakened prompt still met the agreement gates each time, so it is the grounding and review-rate gates that catch it.
+- The fairness gates can be breached by model noise alone. The identity-pair mean sat exactly on its limit in two of the first eight live runs (decision S4c-12), the dialect and verbosity mean did the same in the ninth, and the build's lead session estimates that roughly 1 full run in 20 would breach a pair gate with no change to the system. That is an estimate from eight runs, not a measured rate; a production gate would use more pairs.
+- Record-keeping is proven on local runs against the live model (decision S3-13). The review rate has been measured on 41 requests from the app run locally against the live model: control-triggered 9 of 41 (22%), inside the 25% band, on a mix that deliberately included a burst of injected answers. On the deployed application both are pending live.
 - The platform guardrail path (a blocked call becomes a routed outcome with no score) is proven by unit tests only; the guardrail did not block the injection sample in live testing (decision S3-12).
 
 ## 3. Deployer duties: Article 26
@@ -73,9 +73,9 @@ The demo has no deployer. What it offers a deployer is the information a person 
 | Deny rules, in every permission mode | [Settings](../.claude/settings.json) |
 | Command gate, fail closed | [cloud_gate.py](../.claude/hooks/cloud_gate.py) and [its tests](../tests/hooks/test_cloud_gate.py); [evidence lock](../.claude/hooks/protect_evidence.py) and [its tests](../tests/hooks/test_protect_evidence.py) |
 | Scoped identities | [Architecture](architecture.md#identities), [identity module](../infra/modules/identity.bicep) |
-| Required checks | [ci](../.github/workflows/ci.yml) is required on `main`; [evals](../.github/workflows/evals.yml) becomes required when the stability proof merges. The ruleset lives in GitHub settings, not in a file (decision D22) |
+| Required checks | [ci](../.github/workflows/ci.yml) is required on `main`; [evals](../.github/workflows/evals.yml) becomes required when the stability proof (pull request #13, open at the time of writing) merges. The ruleset lives in GitHub settings, not in a file (decision D22) |
 | Independent verification | [Verifier](../.claude/agents/verifier.md), [label auditor](../.claude/agents/label-auditor.md), [review standard](../REVIEW.md) |
-| Owner-only production gate | The `demo` environment in the [deploy workflow](../.github/workflows/deploy.yml), with signed build provenance verified before any change. No deploy has run yet: pending live |
+| Owner-only production gate | The `demo` environment in the [deploy workflow](../.github/workflows/deploy.yml), with signed build provenance verified before any change. No deploy has run yet: a deploy run waits for the owner's approval, so this is pending live |
 
 The limits of the harness are recorded as they are. Hooks and permission rules are guardrails, not a security boundary (decision D14); the hard boundaries are the ruleset with an empty bypass list, the owner-only approval and the scope of each identity. Azure identifiers, not credentials, were printed in one workflow log and are now held as secrets (decision F-1).
 

@@ -1,10 +1,10 @@
 # Eval card
 
-One page on what the offline evaluation of the answer scorer measures, what it found, and what that does and does not prove. Design: [the spec](../intent/spec.md), section 7. As of 13 October 2026; figures still to come are marked PENDING.
+One page on what the offline evaluation of the answer scorer measures, what it found, and what that does and does not prove. Design: [the spec](../intent/spec.md), section 7. As of 13 October 2026, late evening.
 
 ## Purpose and the decision it informs
 
-The eval informs one decision: **merge or block a change** to a prompt, a rubric, the scoring code or a dataset. A passing gate allows the merge and a failing gate blocks it. It is wired to run on every pull request that touches those paths, nightly against the pinned deployment, and on demand ([evals workflow](../.github/workflows/evals.yml)); the nightly schedule takes effect once the workflow is on `main`. It informs no decision about any person: all data is synthetic and every output of the service is decision support.
+The eval informs one decision: **merge or block a change** to a prompt, a rubric, the scoring code or a dataset. A passing gate allows the merge and a failing gate blocks it. It is wired to run on every pull request that touches those paths, nightly against the pinned deployment, and on demand ([evals workflow](../.github/workflows/evals.yml)); the workflow has been on `main` since pull request #9 merged, but that copy reads variables that have since been deleted and stops at sign-in, so the nightly schedule takes effect once pull request #13 is merged. It informs no decision about any person: all data is synthetic and every output of the service is decision support.
 
 ## Datasets and label provenance
 
@@ -24,10 +24,10 @@ The eval informs one decision: **merge or block a change** to a prompt, a rubric
 
 - Model: gpt-5.4-mini, version 2026-03-17, deployment `scorer-mini`, Global Standard, no automatic upgrade ([Bicep](../infra/modules/foundry.bicep)).
 - Call: Chat Completions with a strict JSON schema and an enum score, `reasoning_effort: "none"`, `max_completion_tokens` 600, no `temperature` or `top_p` because this model family does not accept them ([client](../src/scorer/model_client.py), [test](../tests/unit/test_foundry_client.py)).
-- Prompt: `v1`, by hash in the [registry](../prompts/scorer/registry.yaml). It was **not tuned and never changed**: every figure on this page is the same prompt.
+- Prompt: `v1`, by hash in the [registry](../prompts/scorer/registry.yaml). It was **not tuned and never changed**: every figure on this page is the same prompt, except the three runs on the weakened prompt under "Stability proof".
 - Repetitions: every answer is scored **3 times** in parallel; the score is the median and the spread is the largest minus the smallest. One full run is 92 inputs, of which 90 reach the model: about 270 model calls, 400,338 tokens in and about 58,500 out, about 0.43 GBP (priced as uncached, so an upper estimate).
 - Order: items are shuffled with a seed that is printed in the report. Sampling variance cannot be switched off, so the gates use tolerances and the proof is repeated runs.
-- Retries: when an input comes back with no score at all, the runner tries it again up to three times with waits and lists the retried ids in the report (decision S4c-6). A score is never retried for a better one.
+- Retries: when an input comes back with no score at all, the runner tries it again up to three times with waits and lists the retried ids in the report (decision S4c-6). One run makes at most three such extra attempts in all; needing a fourth stops the run with no report, because a rate of unusable replies is itself a finding (decision S4c-9). A score is never retried for a better one.
 
 ## Metrics, with n
 
@@ -55,11 +55,13 @@ Thresholds are in [thresholds.yaml](../evals/thresholds.yaml) at the spec's valu
 
 One golden `dev` answer is scored two levels under its label in most runs, and every report counts it as a defect; that is the one answer missing from within-1 agreement. The reports also count one defect on a `holdout` row, which is not inspected case by case.
 
+**A ninth run, after the proof.** The CI gate run on pull request [#13](https://github.com/ranaidrees/answer-scorer/pull/13), at commit `01cb892`, also returned PASS, with no input tried again. Kappa 0.865; exact agreement 25 of 30; within-1 agreement 27 of 30, **exactly on its 90% limit**; identity pairs mean absolute difference 0.125; dialect and verbosity pairs mean absolute difference 0.250, **exactly on its limit**; injection 18 of 18; edge cases 6 of 6; ungrounded quotes 0 of 344; control-triggered review rate 3 of 30. Two gated metrics sat on their limits in that run, so it passed with nothing to spare on either. Its noise floor and flip rate are not recorded on this page, and its report is not among the files under `evals/reports/` in this checkout; the figures are those of the `evals` check on that pull request. In that run three answers, not one, were more than one level from their labels.
+
 ## Noise floor and flip rate
 
-The same answer, scored three times with the same prompt, did not always get the same score: the three runs disagreed on 14 to 18 of 90 answers in these four runs. That is the noise floor. A fairness pair "flips" when the two medians differ; that happened on 0, 2, 0 and 2 of 16 pairs, under the noise floor each time, and no pair differed by more than 1. Across all eight completed live runs on this prompt there were 11 flips in 128 pair-runs (8.6%). So these runs give no sign that an identity, dialect or length cue moves scores more than chance does. With 16 pairs they cannot show that no such effect exists.
+The same answer, scored three times with the same prompt, did not always get the same score: the three runs disagreed on 14 to 18 of 90 answers in these four runs. That is the noise floor. A fairness pair "flips" when the two medians differ; that happened on 0, 2, 0 and 2 of 16 pairs, under the noise floor each time, and no pair differed by more than 1. Across the first eight completed live runs on this prompt there were 11 flips in 128 pair-runs (8.6%); the flip count of the ninth is not recorded on this page. So these runs give no sign that an identity, dialect or length cue moves scores more than chance does. With 16 pairs they cannot show that no such effect exists.
 
-**The pair gates have little headroom.** In two of the eight runs the identity mean sat exactly on its 0.25 limit: 2 of 8 pairs one level apart. One more flipped pair would have breached the gate. The build's lead session estimates that roughly 1 full run in 20 would breach a pair gate from model noise alone, with no change to the system. That is an estimate from eight runs, not a measured rate. A nightly failure on a pair gate alone should therefore be run once more before it is read as a regression, and a production gate would use more pairs.
+**The pair gates have little headroom.** In two of the first eight runs the identity mean sat exactly on its 0.25 limit: 2 of 8 pairs one level apart (decision S4c-12). One more flipped pair would have breached the gate. In the ninth run the dialect and verbosity mean sat exactly on the same limit. The build's lead session estimates that roughly 1 full run in 20 would breach a pair gate from model noise alone, with no change to the system. That is an estimate from eight runs, not a measured rate. A nightly failure on a pair gate alone should therefore be run once more before it is read as a regression, and a production gate would use more pairs.
 
 ## Stability proof
 
@@ -78,31 +80,34 @@ A gate that flakes gets ignored, so the gate must give the same answer three tim
 | 3 | `20261013T202107Z` | PASS | 0.926 | 29 of 30 | 25 of 30 | Proof 1 |
 | 3 | `20261013T202848Z` | PASS | 0.947 | 29 of 30 | 27 of 30 | Proof 2 |
 | 3 | `20261013T203628Z` | PASS | 0.926 | 29 of 30 | 25 of 30 | Proof 3 |
+| After the proof | CI, pull request #13, commit `01cb892` | PASS | 0.865 | 27 of 30 | 25 of 30 | Ninth run. Within-1 agreement and the dialect and verbosity mean both exactly on their limits |
 
 - **Attempt 1: pass, pass, fail.** The failing case was the `dev` edge case whose answer only repeats the question. The model gave runs of 2, 1, 2 and did not mark it off topic, where the expected behaviour is off topic or a score of 1. In the two earlier runs the same case scored 1. The gate was right to fail: the behaviour depended on model noise.
 - **The fix was a control, not a looser check** (decision S4c-3). A deterministic question-echo check, `src/scorer/echo.py`: when fewer than 35% of an answer's words are words the question does not contain, the answer is flagged off topic and routed, whatever the model says. On `dev` data the restated question sits at 19% and every real answer is above 60%.
 - **Attempt 2: one pass, then a stopped run.** The model was unavailable on one input, so the runner stopped with no report and no invented score. That is not a gate result, but in CI it would have failed the check. The fix is the bounded retry described under "Inference settings" (decision S4c-6).
-- **Attempt 3: three consecutive passes on one commit, after the last code change.** Only these three count as the proof (decision S4c-7). The baseline in CI is a fourth passing run on the same prompt at an earlier commit. Overall the accepted prompt passed seven of its eight completed live runs.
+- **Attempt 3: three consecutive passes on one commit, after the last code change.** Only these three count as the proof (decision S4c-7). The baseline in CI is a fourth passing run on the same prompt at an earlier commit, and the CI gate run on pull request #13 is a later one. Overall the accepted prompt passed eight of its nine completed live runs.
 
-The weakened prompt:
+**On the weakened prompt: three full local runs in a row on one commit, and the gate failed all three** (decision S4c-11).
 
-| Run | Prompt | Where | Gate result and figures |
-|---|---|---|---|
-| Weak 1 | `v0-weak` | local | [[PENDING: weak-prompt run 1 gate result and breached metrics]] |
-| Weak 2 | `v0-weak` | local | [[PENDING: weak-prompt run 2 gate result and breached metrics]] |
-| Weak 3 | `v0-weak` | local | [[PENDING: weak-prompt run 3 gate result and breached metrics]] |
+| Run | Prompt | Where | Gate | Kappa | Ungrounded quotes | Control-triggered review rate | Gated metrics breached |
+|---|---|---|---|---|---|---|---|
+| Weak 1, `20261013T204457Z` | `v0-weak` | local | **FAIL** | 0.903 | 333 of 333 | 30 of 30 | Ungrounded quote rate; control-triggered review rate |
+| Weak 2, `20261013T205241Z` | `v0-weak` | local | **FAIL** | 0.855 | 332 of 332 | 30 of 30 | Those two, and the injection pairs mean (injected minus clean): 0.278 against a limit of 0.25 |
+| Weak 3, `20261013T210024Z` | `v0-weak` | local | **FAIL** | 0.867 | 333 of 333 | 30 of 30 | Those two, the injection pairs mean (0.278), and the largest injection pair difference: 2 against a limit of 1 |
+
+The weakened prompt still met the agreement gates in all three runs, with kappa above 0.70 each time. Agreement with the labels alone would have let it through; it is the grounding and review-rate gates that catch it. The injection gates caught it in two runs of the three, not in all. The reports of these three runs are on the `demo/weak-prompt` branch only, which is never merged, so they are not under `evals/reports/` on `main`.
 
 ## Limitations
 
 - **Synthetic, and one family.** The same model family wrote the answers, labelled them and audited the labels. Real answers are messier and real raters disagree.
 - **Small.** 30 answers, 16 pairs, 18 injected answers, 6 edge cases. One answer moves agreement by more than three points. No intervals are given.
-- **An easy pass on agreement.** The prompt met the agreement gates without tuning and the audit agreed on every label. Both point to a golden set that may be too easy to separate a good prompt from an adequate one.
+- **An easy pass on agreement.** The prompt met the agreement gates without tuning and the audit agreed on every label. Both point to a golden set that may be too easy to separate a good prompt from an adequate one: the weakened prompt met the agreement gates too. The margin is not always wide, though: in the ninth run within-1 agreement sat exactly on its limit.
 - **The gate is not flake-free.** It took three attempts to get three consecutive passes, one edge case needed a deterministic check because the model alone was inconsistent on it, and the pair gates can be breached by noise (see above). Three passes show the gate is stable enough to use, not that it will never need a second run.
 - **Variance remains.** About 15% to 20% of answers had runs that disagreed. In three live smoke runs the same strong sample scored 5 twice and 3 once.
 - **One known miss.** One golden `dev` answer is scored two levels under its label in most runs. It is reported as it is; the prompt was not tuned to remove it.
 - **Injection coverage.** 18 attacks in English, written by the same agent family that wrote the screen. Our own screen flags all 18, which an offline run shows without the model; Azure's guardrail did not block the one sample sent live three times (decision S3-12). The guardrail-block path is proven by unit tests only.
 - **Fairness coverage.** Counterfactual text pairs test whether a cue in the text moves the score. They are not an adverse impact analysis, which needs consented demographic data from real use.
-- **Settings in reports.** A report prints the spec's inference settings rather than values read back from the live client (decision S4b-11); the client's own test checks the values it sends.
+- **Settings in reports.** A report prints the client's and the pipeline's own constants for the inference settings, and a test checks that the printed values equal them (decision F-13). They are constants in the code, not values read back from the service.
 
 ## Validity statement
 

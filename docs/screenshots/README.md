@@ -1,6 +1,6 @@
 # Screenshots
 
-The fallback pictures for the [walkthrough](../walkthrough.md), one per step. **None has been taken yet: every file below is pending live.** The application is not deployed and nothing is merged to `main`, so a picture taken today would show a state the walkthrough does not describe.
+The fallback pictures for the [walkthrough](../walkthrough.md), one per step. **None has been taken yet: every file below is pending live.** The stack is merged to `main` except pull request #13, but the application is not deployed yet and a deploy run still waits for the owner's approval, so a picture taken today would show a state the walkthrough does not describe.
 
 | File | Shows | Walkthrough step | Taken by | State |
 |---|---|---|---|---|

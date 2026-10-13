@@ -4,23 +4,23 @@ A small reference implementation of governed AI output for a high-stakes decisio
 
 > **Disclaimer.** **Synthetic data only:** every answer, label and name in this repository is invented. **A reference implementation:** it shows that the controls work, not that the scoring is valid. Reliability is not validity; validity needs trained raters and occupational psychologists. **Not for use in real hiring decisions.**
 
-**Status, 13 October 2026:** built and checked as a stack of open pull requests. Nothing is merged to `main` yet and the application is not deployed yet, so there is no live URL. Anything that needs one is marked "pending live", and a figure that has not been measured yet is marked PENDING.
+**Status, 13 October 2026, late evening:** ten pull requests are merged to `main`. The eleventh, #13 (the baseline, the stability proof and the review fixes), is open at the time of writing, to be merged after its checks. The application is not deployed yet: a deploy run waits for the owner's approval, so there is no live URL. Anything that needs one is marked "pending live", and anything not known yet is marked PENDING.
 
 ## Results scoreboard
 
 Every eval figure comes from a full run against the pinned model deployment (gpt-5.4-mini, version 2026-03-17) on synthetic answers that Claude wrote and labelled. The figures show that the gate and the controls behave consistently. They do not show that the scores are right: reliability is not validity. Each figure has its n beside it, and there are no confidence intervals because 30 answers are too few for a reliable one.
 
-Cells for the accepted prompt hold the three consecutive runs that make up its stability proof, in order. The first live run, in CI on pull request [#9](https://github.com/ranaidrees/answer-scorer/pull/9), also met every threshold; the [eval card](docs/eval_card.md) has all eight runs.
+Cells for the accepted prompt hold the three consecutive runs that make up its stability proof, in order. The first live run, in CI on pull request [#9](https://github.com/ranaidrees/answer-scorer/pull/9), also met every threshold, and so did a ninth run, the CI gate on pull request [#13](https://github.com/ranaidrees/answer-scorer/pull/13), with two metrics exactly on their limits; the [eval card](docs/eval_card.md) has all nine runs on the accepted prompt and the three on the weakened one.
 
 **The eval gate: the accepted prompt against a deliberately weakened one**
 
 | | Accepted prompt `v1` (never tuned, never changed) | Weakened prompt `v0-weak` |
 |---|---|---|
-| Gate result | PASS, PASS, PASS on one commit, at the third attempt (decision S4c-7) | [[PENDING: gate results of the three weak-prompt runs]] |
-| Quadratic weighted kappa against labels (n=30, gate at least 0.70) | 0.926, 0.947, 0.926 | [[PENDING: weak-prompt kappa in each of three runs]] |
-| Ungrounded quote rate (gate at most 2% of quotes) | 0 of 341, 0 of 332, 1 of 327 | [[PENDING: weak-prompt ungrounded quote rate in each of three runs]] |
-| Control-triggered review rate, golden set (n=30, gate at most 15%) | 0 of 30, 1 of 30, 2 of 30 | [[PENDING: weak-prompt control-triggered review rate in each of three runs]] |
-| Gated metrics breached | none in any of the three | [[PENDING: which gated metrics the weak prompt breaches]] |
+| Gate result | PASS, PASS, PASS on one commit, at the third attempt (decision S4c-7) | FAIL, FAIL, FAIL on one commit (decision S4c-11) |
+| Quadratic weighted kappa against labels (n=30, gate at least 0.70) | 0.926, 0.947, 0.926 | 0.903, 0.855, 0.867: the weakened prompt still met the agreement gate each time |
+| Ungrounded quote rate (gate at most 2% of quotes) | 0 of 341, 0 of 332, 1 of 327 | 333 of 333, 332 of 332, 333 of 333 |
+| Control-triggered review rate, golden set (n=30, gate at most 15%) | 0 of 30, 1 of 30, 2 of 30 | 30 of 30 each time |
+| Gated metrics breached | none in any of the three | Ungrounded quote rate and control-triggered review rate in all three. Run 2 also: injection pairs mean (injected minus clean) 0.278 against a limit of 0.25. Run 3 also: that mean again, and a largest injection pair difference of 2 against a limit of 1 |
 
 **Everything else**
 
@@ -36,16 +36,16 @@ Cells for the accepted prompt hold the three consecutive runs that make up its s
 | Edge cases with the expected behaviour (n=6, gate 100%) | 6 of 6 each time | [Edge cases](evals/datasets/edge_cases.jsonl) |
 | Attempts needed for the stability proof | 3. Attempt 1 ended in a failed run and attempt 2 in a stopped run; both were fixed in code, never in a threshold, dataset, rubric or prompt | [Eval card](docs/eval_card.md#stability-proof) |
 | Label audit agreement | 30 of 30 between two Claude agents, one of them blind. No person labelled or reviewed the answers | [Label audit](evals/label_audit.md) |
-| p95 latency (SLO: at or under 6 s, warm) | [[PENDING: p95 latency from warm traffic on the deployed app]]. Local proof only so far: 7 scores, median 2.2 s (decision S3-13) | [SLOs](docs/slo.md) |
-| Cost per score (estimate from published prices) | About 0.004 GBP on ten local requests (decision S6-6). [[PENDING: cost per score from live traffic]] | [Prices](config/prices.yaml) |
-| Review rate on live traffic (band: at or under 25%) | [[PENDING: control-triggered review rate on live traffic]] | [SLOs](docs/slo.md) |
+| p95 latency (SLO: at or under 6 s, warm) | 3.3 s, with a median of 2.54 s: met, on the app run locally against the live model, not on the deployed app. From 42 requests, of which 41 were in the telemetry when the dashboard queries ran. The deployed figure is pending live | [SLOs](docs/slo.md) |
+| Availability on the same traffic (SLO: 99%) | 100%: 0 failures in 41 requests. Local app; the deployed figure is pending live | [SLOs](docs/slo.md) |
+| Cost per score on the same traffic (estimate from published prices) | About 0.0047 GBP: 41 scores for 0.19 GBP in total | [Prices](config/prices.yaml) |
+| Review rate on the same traffic (band: control-triggered at or under 25%) | Control-triggered: 9 of 41 (22%), inside the band, on a mix that deliberately included a burst of injected answers. Any review: 22 of 41, most of them from the adverse-score rule, which sends every score of 1 or 2 to a person. Local app; the deployed figure is pending live | [SLOs](docs/slo.md) |
 | Cost of one full eval run (upper estimate) | About 0.43 GBP: 400,338 tokens in and about 58,500 out, priced as uncached | [Prices](config/prices.yaml) |
-| Total Azure spend (limit: 10 GBP) | [[PENDING: total spend at the freeze]] | [Architecture](docs/architecture.md#spend-controls) |
-| Pull requests | 10 slice pull requests open and checked so far (#2 to #11) | [How it was built](#how-it-was-built) |
-| Important review findings fixed | 13 so far (S1 1, V 2, S2 4, S3 1, S4b 3, S5a 1, S6 1) | Review comments on each pull request |
-| Verifier catches | 3 FAIL verdicts, all on the S0 cloud gate, each fixed with tests (decisions D13, D17, D18) | [Decisions](intent/decisions.md) |
-
-[[PENDING: final counts of pull requests, Important findings fixed and verifier FAIL verdicts]]
+| Total Azure spend (limit: 10 GBP) | About 6 GBP at the freeze. An estimate from token counts, because Azure's own figures lag; it includes about 0.33 GBP expected for one CI run on the weak-prompt pull request | [Architecture](docs/architecture.md#spend-controls) |
+| Pull requests | 10 merged (#2, #12, #4 to #11). #13 is open at the time of writing, to be merged after its checks. The weak-prompt pull request stays open by design. #1 and #3 are not merged: #3 is closed and #1 awaits the owner | [How it was built](#how-it-was-built) |
+| Important findings from the in-session reviews before merge | 13, all fixed (S1 1, V 2, S2 4, S3 1, S4b 3, S5a 1, S6 1). The fixes for the S4b and S5a ones land with #13 | Review comments on each pull request |
+| Important findings from the Claude review in CI, live since #12 merged | #6: two on records, fixed before merge. #9: one new, a record mismatch, fixed before merge, and one not accepted (it called the workflow `cache-mode` key invalid; the key exists, decision D5). #10: one, already known, fixed in #13. #11: one, a missing Status record, supplied in #13. #13: one, on decision S4c-8, which the owner accepted (decision S4c-14) | Review comments on each pull request |
+| Verifier catches | 4 FAIL verdicts. Three on the S0 cloud gate, each fixed with tests (decisions D13, D17, D18). One on the first S4c run, for gaps in the records and an uncapped retry, fixed by decision S4c-9 and the records; the next run on S4c returned PASS | [Decisions](intent/decisions.md) |
 
 ## Defence in depth: four layers
 
@@ -88,19 +88,19 @@ An AI coding agent, Claude Code, wrote everything that came after the intent, th
 **The gates every slice had to get through**
 
 - `ci` green: lint, format, unit and hook tests, a secret scan of the full history, the Bicep build, the image build and a workflow lint ([ci.yml](.github/workflows/ci.yml)).
-- An independent [verifier](.claude/agents/verifier.md) subagent returning PASS on the branch. It returned FAIL three times on S0, and each time the gap was closed with tests.
-- An independent review against [REVIEW.md](REVIEW.md), which is also the security review, with every Important finding fixed. It ran in the build session and its findings are comments on each pull request. The Claude review in CI cannot run until its workflow file is on the default branch (decision D25).
+- An independent [verifier](.claude/agents/verifier.md) subagent returning PASS on the branch. It returned FAIL four times: three times on S0, where each gap was closed with tests, and once on the first S4c run, for gaps in the records and an uncapped retry (decision S4c-9).
+- An independent review against [REVIEW.md](REVIEW.md), which is also the security review, with every Important finding fixed. Before #12 merged it was run in the build session by an independent subagent, because the Claude review in CI cannot run until its workflow file is on the default branch (decision D25); its findings are comments on each pull request. The Claude review in CI has been live since #12 merged. It reviewed #4, #5, #6, #8, #9, #10, #11 and #13, and it skipped #7 because that diff edits the review workflow itself. Three pull requests (#9, #10 and #11) were merged with findings from the CI review open: see [How it was built](#how-it-was-built).
 - The eval gate for anything that touches prompts, rubrics, scoring code or datasets ([evals.yml](.github/workflows/evals.yml), [thresholds](evals/thresholds.yaml)).
 - Limits the agent cannot argue with: deny rules and a [command gate](.claude/hooks/cloud_gate.py) on the developer machine, a ruleset on `main` with an empty bypass list, identities that hold one narrow role each, and a deploy that waits for the owner. The hooks are guardrails, not a security boundary (decision D14).
 
 **Decisions only the owner made, or still has to make**
 
-- Made: the [intent](intent/intent.md), and the 21 design decisions C1 to C21 in [the spec](intent/spec.md), section 13.
-- Still to make: switching on email privacy for the account so that the stack can be merged (decision D19); making the container image public once; approving every production deploy; confirming the alert email address (decision S6-7); any loosening of a threshold (none has been asked for); and the final acceptance.
+- Made: the [intent](intent/intent.md), and the 21 design decisions C1 to C21 in [the spec](intent/spec.md), section 13. In the build session on 13 October: switching on email privacy for the account and asking for the stack to be merged (decision D19), and accepting decision S4c-8, under which the unit tests follow the registry's active prompt instead of pinning `v1` (decision S4c-14).
+- Still to make: making the container image public once; approving every production deploy, starting with only the newest waiting run and only after #13 is merged (the older waiting runs come from a workflow that read variables since deleted, and would stop at sign-in); closing pull request #1; confirming the alert email address (decision S6-7); any loosening of a threshold (none has been asked for); and the final acceptance.
 
 **What no person has reviewed**
 
-The repository records no review by a person of the code, the tests, the rubrics, the golden labels, the eval results or these documents. The spec's "accepted for build" status was set by the agent under delegation and says so. The checks listed above are automated or done by other AI agents. [[PENDING: the owner's final test and acceptance, with its date, or a statement that it has not happened]]
+The repository records no review by a person of the code, the tests, the rubrics, the golden labels, the eval results or these documents. The spec's "accepted for build" status was set by the agent under delegation and says so. The checks listed above are automated or done by other AI agents. The owner's acceptance of decision S4c-8 is a decision on that question, not a review of the test code by a person. The owner's final test and acceptance has not happened yet.
 
 ## How it was built
 
@@ -110,7 +110,7 @@ The artifact chain is intent, then spec, then plan, then pull requests, then pro
 |---|---|---|
 | Intent | [intent/intent.md](intent/intent.md), [intent/spec.md](intent/spec.md), [intent/plan.md](intent/plan.md) | First commits on `main` |
 | S0 | Delivery harness: hooks, deny rules, verifier, `ci` | [#2](https://github.com/ranaidrees/answer-scorer/pull/2) |
-| Workflows | Claude review against `REVIEW.md`, pinned and quiet. Replaces #1, which is superseded and will be closed unmerged | [#3](https://github.com/ranaidrees/answer-scorer/pull/3) |
+| Workflows | Claude review against `REVIEW.md`, pinned and quiet. #12 replaces [#3](https://github.com/ranaidrees/answer-scorer/pull/3), which GitHub closed by itself when its base branch was deleted, and #1, which is superseded and still open for the owner to close | [#12](https://github.com/ranaidrees/answer-scorer/pull/12) |
 | V | [Rubrics](rubrics/teamwork.yaml) and design validation | [#4](https://github.com/ranaidrees/answer-scorer/pull/4) |
 | S1 | Azure resources as code, keyless | [#5](https://github.com/ranaidrees/answer-scorer/pull/5) |
 | S4a | Eval datasets and the blind label audit | [#6](https://github.com/ranaidrees/answer-scorer/pull/6) |
@@ -119,20 +119,22 @@ The artifact chain is intent, then spec, then plan, then pull requests, then pro
 | S4b | Eval runner, metrics, gate and the `evals` workflow | [#9](https://github.com/ranaidrees/answer-scorer/pull/9) |
 | S5a | Dockerfile and the deploy workflow | [#10](https://github.com/ranaidrees/answer-scorer/pull/10) |
 | S6 | Dashboard queries, workbook, alerts and SLOs | [#11](https://github.com/ranaidrees/answer-scorer/pull/11) |
-| S4c | Baseline and the stability proof | [[PENDING: pull request number for S4c]] |
+| S4c | Baseline, the stability proof and the review fixes | [#13](https://github.com/ranaidrees/answer-scorer/pull/13) |
 | Weak prompt | A weakened prompt that the gate blocks; stays open | [[PENDING: pull request number for the weak prompt]] |
 | S8 | This demo pack | [[PENDING: pull request number for S8]] |
 | S5b | First deploy, approved by the owner | Pending live |
 
-Each slice had `ci` green, a verifier PASS and an independent review with its Important findings fixed; the verdicts and findings are comments on its pull request.
+Each slice had `ci` green, a verifier PASS and an independent review; the verdicts and findings are comments on its pull request.
 
-**Why nothing is merged yet.** No pull request is merged in the unattended build (decision D19): any merge made by GitHub would write the account's private email address into a commit on the public `main`, and the agent does not do that. Every slice is a pull request stacked on the one before it. The owner turns on "Keep my email addresses private", then the stack is merged in order.
+**What is merged.** Ten pull requests are merged to `main` by squash merge, in this order: #2, #12, #4, #5, #6, #7, #8, #9, #10, #11. #13 is open at the time of writing, with `ci` green and the live `evals` gate at PASS, to be merged after its checks. #9, #10 and #11 were merged with findings from the CI review open, because their fixes were already written on the S4c branch and a pushed branch is never rewritten; each has a comment that says so, and the fixes land with #13.
+
+**Why the stack was merged late and in one go.** No pull request was merged in the unattended build (decision D19): any merge made by GitHub would have written the account's private email address into a commit on the public `main`, and the agent does not do that. Every slice was a pull request stacked on the one before it. On 13 October the owner turned on "Keep my email addresses private" and asked for the stack to be merged, and it was merged in order.
 
 **Who decided what.** Every decision is one row in [intent/decisions.md](intent/decisions.md) with a date, a reason and who made it:
 
 | Who | What |
 |---|---|
-| owner | The intent; decisions C1 to C21; every deploy approval and the final acceptance, which are still to come |
+| owner | The intent; decisions C1 to C21; switching on email privacy and asking for the merge; accepting decision S4c-8 (decision S4c-14); every deploy approval and the final acceptance, which are still to come |
 | rule | Outcomes a written rule settled mechanically, such as the label audit rule (S4a-8) and the independent rubric check (D23) |
 | agent | Everything the intent, spec and plan left open: the D rows and the rows named after each slice (S1 to S6) |
 
@@ -156,12 +158,12 @@ The first three are offline and need nothing else. A fake run says nothing about
 - **Synthetic data, one model family.** Claude wrote the answers, labelled them and audited the labels. Agreement of 30 of 30 between two agents of one family shows that the labels are consistent, not that they are right, and the golden set may be easier than real answers.
 - **The prompt was not tuned.** Prompt `v1` passed the gate on its first live run and was never changed, so there is no tuning result to report. One golden `dev` answer is scored two levels under its label in most runs, and that is reported, not tuned away. The deterministic screens were adjusted against `dev` rows (decisions S2-12 and S2-14).
 - **Small numbers.** 30 golden answers and 16 pairs are too few for confidence intervals, and one answer moves agreement by more than three points.
-- **The gate is not flake-free.** The stability proof took three attempts. One run failed on an edge case where the model alone was inconsistent, and one run stopped when the model was unavailable; each was fixed in code, and only then did three runs pass in a row. The accepted prompt passed seven of its eight completed live runs.
-- **The pair gates have little headroom.** In two of those eight runs the identity-pair mean sat exactly on its 0.25 limit, with 2 of 8 pairs one level apart; one more flipped pair would have breached the gate. About one fairness pair in ten flips per run from model noise alone (11 flips in 128 pair-runs). The build's lead session estimates that roughly 1 full run in 20 would breach a pair gate with no change to the system: an estimate from eight runs, not a measured rate. A nightly failure on a pair gate alone should be run once more before it is read as a regression, and a production gate would use more pairs.
+- **The gate is not flake-free.** The stability proof took three attempts. One run failed on an edge case where the model alone was inconsistent, and one run stopped when the model was unavailable; each was fixed in code, and only then did three runs pass in a row. The accepted prompt passed eight of its nine completed live runs.
+- **The pair gates have little headroom.** In two of the first eight of those runs the identity-pair mean sat exactly on its 0.25 limit, with 2 of 8 pairs one level apart; one more flipped pair would have breached the gate (decision S4c-12). In the ninth run, the CI gate on #13, the dialect and verbosity mean sat exactly on the same limit, and within-1 agreement sat exactly on its own limit of 27 of 30. About one fairness pair in ten flipped per run from model noise alone in the first eight runs (11 flips in 128 pair-runs). The build's lead session estimates that roughly 1 full run in 20 would breach a pair gate with no change to the system: an estimate from eight runs, not a measured rate. A nightly failure on a pair gate alone should be run once more before it is read as a regression, and a production gate would use more pairs.
 - **Model variance is real.** In three live smoke runs the same strong sample scored 5 twice and 3 once. The three-run rule and the spread flag exist for that reason, and they do not remove it.
 - **The platform guardrail has not been seen to block.** Our own screen caught the injection sample in live testing; the guardrail-block path is proven by unit tests only.
 - **Hooks are guardrails, not a boundary** (decision D14). The hard limits are the ruleset, the owner-only deploy approval and the scope of each identity.
-- **Not live yet.** No deploy has happened, so latency, cost and review rate on live traffic are pending, and the alert email has not been delivered yet because its address awaits the owner's confirmation (decision S6-7).
+- **Not live yet.** No deploy has happened: a deploy run waits for the owner's approval. The latency, availability, cost and review-rate figures above come from the app run locally against the live model, and the same figures on the deployed app are pending live. The four dashboard tiles return data when their queries are run with the read-only CLI, but nobody has looked at the workbook in the portal yet. The alert email has not been delivered yet because its address awaits the owner's confirmation (decision S6-7).
 - **One log exposure.** Azure identifiers, not credentials, were printed in one workflow log; they are now held as secrets (decision F-1).
 - **Scope.** English only, two generic competencies, no review queue, no real rater study and no formal compliance sign-off. See [docs/governance.md](docs/governance.md) for what production would add.
 
