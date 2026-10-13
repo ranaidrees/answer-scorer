@@ -1,0 +1,416 @@
+name: deploy
+
+# The only route to production (spec section 9). Three routes:
+#   build      a push to main, or a manual run with no inputs: build, sign, verify, deploy, smoke test
+#   image_sha  manual: redeploy the image built from an earlier commit (the rollback route)
+#   warm       manual: keep one replica running on the current image
+# The deploy job waits for the owner's approval on the `demo` environment.
+
+on:
+  push:
+    branches: [main]
+    # Documentation merges do not queue a deploy.
+    paths-ignore:
+      - "intent/**"
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      warm:
+        description: "Keep one replica warm on the current image (no build, no new image)"
+        type: boolean
+        default: false
+      image_sha:
+        description: "Redeploy the image built from this full commit SHA (rollback, no build)"
+        type: string
+        default: ""
+
+# This workflow runs on main, so it may save caches.
+cache-mode: write
+
+permissions: {}
+
+# One deploy at a time. A running deploy is never cancelled.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build
+    # Skipped on the warm and image_sha routes, and on manual runs from any branch but main.
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (!inputs.warm && inputs.image_sha == '')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Registry names must be lower case; the name comes from the repository, not from a literal.
+      - name: Work out the image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Sign in to the registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One plain image manifest, tagged with the commit SHA. BuildKit's own provenance
+      # and SBOM documents are off: provenance is signed in the next step instead.
+      - name: Build and push the image
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: false
+          sbom: false
+
+      - name: Sign build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  deploy:
+    name: deploy
+    needs: build
+    # Runs after a successful build, or without one on the warm and image_sha routes.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && github.event_name == 'workflow_dispatch' && (inputs.warm || inputs.image_sha != ''))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The owner approves every run of this job. The deploy identity trusts only this environment.
+    environment: demo
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+      attestations: read
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+    steps:
+      # image_sha is typed by a person. It reaches the script only through the
+      # environment, is checked before use and is never echoed back unchecked.
+      - name: Choose the route
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WARM: ${{ inputs.warm }}
+          IMAGE_SHA: ${{ inputs.image_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          if [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+            WARM="false"
+            IMAGE_SHA=""
+          fi
+          if [ "$WARM" = "true" ] && [ -n "$IMAGE_SHA" ]; then
+            echo "::error::Choose warm or image_sha, not both."
+            exit 1
+          fi
+          if [ "$WARM" = "true" ]; then
+            route="warm"
+            source_sha=""
+          elif [ -n "$IMAGE_SHA" ]; then
+            if ! [[ "$IMAGE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "::error::image_sha must be a full commit SHA: exactly 40 hexadecimal characters."
+              exit 1
+            fi
+            route="image_sha"
+            source_sha="${IMAGE_SHA,,}"
+          else
+            route="build"
+            source_sha="$GITHUB_SHA"
+          fi
+          {
+            echo "route=${route}"
+            echo "source_sha=${source_sha}"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Route: ${route}"
+
+      # Read-only sign-in, used to look up the tag and to read the image for verification.
+      - name: Sign in to the registry
+        if: steps.route.outputs.route != 'warm'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out the image digest
+        id: digest
+        if: steps.route.outputs.route != 'warm'
+        env:
+          ROUTE: ${{ steps.route.outputs.route }}
+          IMAGE: ${{ steps.route.outputs.image }}
+          SOURCE_SHA: ${{ steps.route.outputs.source_sha }}
+          BUILT_DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          if [ "$ROUTE" = "build" ]; then
+            digest="$BUILT_DIGEST"
+          else
+            # The digest of the existing tag, read from the registry.
+            if ! digest="$(docker buildx imagetools inspect "${IMAGE}:${SOURCE_SHA}" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty')"; then
+              digest=""
+            fi
+            if [ -z "$digest" ]; then
+              echo "::error::No image tagged ${SOURCE_SHA} was found in the registry. Use the SHA of a commit on main that this workflow built."
+              exit 1
+            fi
+          fi
+          if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::The image digest is missing or malformed."
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "Image digest: ${digest}"
+
+      # Must pass before anything changes: the image has signed provenance from this
+      # workflow, run on main, at the expected commit. Any other image is refused.
+      - name: Verify build provenance
+        if: steps.route.outputs.route != 'warm'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.route.outputs.image }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          SOURCE_SHA: ${{ steps.route.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --owner "$GITHUB_REPOSITORY_OWNER" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/deploy.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "$SOURCE_SHA"
+
+      - name: Sign in to Azure (OIDC, deploy identity)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_DEPLOY }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # This log is public. Azure error text can name the subscription, the caller and
+      # resource settings, so every Azure CLI call below goes through this wrapper:
+      # output goes to a file or nowhere, and a failure shows only error codes,
+      # action names and a few known words.
+      - name: Prepare a quiet Azure CLI wrapper
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/az-quiet" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Usage: az-quiet <output file, or - for none> <az arguments...>
+          set -uo pipefail
+          out="$1"
+          shift
+          if [ "$out" = "-" ]; then
+            out=/dev/null
+          fi
+          err="$(mktemp)"
+          status=0
+          az "$@" --only-show-errors >"$out" 2>"$err" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::az $1 $2 failed with exit code ${status}. Its message is withheld from this public log."
+            echo "Error codes, action names and known causes found in the message:"
+            {
+              grep -oE '\([A-Z][A-Za-z]+\)|Microsoft\.[A-Za-z]+(/[A-Za-z]+)+' "$err"
+              grep -oiE 'unauthorized|denied|manifest unknown|timed out|expired' "$err"
+            } | sort -u || true
+          fi
+          rm -f "$err"
+          exit "$status"
+          SCRIPT
+          chmod 700 "$RUNNER_TEMP/az-quiet"
+
+      # The same steps on the first deploy and on every later one. The current
+      # definition is read, and only the image (by digest), the ingress target port
+      # and the two probes are changed. Environment variables, secret references and
+      # scale settings go back exactly as they were read. The identity and the
+      # environment are not sent at all, so they stay as they are and the request
+      # needs no rights beyond the app itself. The definition holds environment
+      # values, so it is written to a private temporary file and never printed.
+      - name: Create a revision with the verified image
+        if: steps.route.outputs.route != 'warm'
+        env:
+          IMAGE: ${{ steps.route.outputs.image }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          current="$RUNNER_TEMP/app-current.json"
+          desired="$RUNNER_TEMP/app-desired.json"
+          state="$RUNNER_TEMP/app-state.json"
+          trap 'rm -f "$current" "$desired" "$state"' EXIT
+          target="${IMAGE}@${DIGEST}"
+
+          "$RUNNER_TEMP/az-quiet" "$current" containerapp show \
+            --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --output json
+
+          if ! jq '
+            if (.properties.template.containers | length) != 1 then
+              error("expected exactly one container")
+            elif .properties.configuration.ingress == null then
+              error("expected ingress to be configured")
+            else . end
+            | {
+                properties: {
+                  configuration: (.properties.configuration | .ingress.targetPort = 8000),
+                  template: (
+                    .properties.template
+                    | del(.revisionSuffix)
+                    | .containers[0].image = (env.IMAGE + "@" + env.DIGEST)
+                    | .containers[0].probes = [
+                        {
+                          type: "Liveness",
+                          httpGet: {path: "/healthz", port: 8000, scheme: "HTTP"},
+                          initialDelaySeconds: 5,
+                          periodSeconds: 10,
+                          timeoutSeconds: 5,
+                          failureThreshold: 3
+                        },
+                        {
+                          type: "Readiness",
+                          httpGet: {path: "/readyz", port: 8000, scheme: "HTTP"},
+                          initialDelaySeconds: 3,
+                          periodSeconds: 5,
+                          timeoutSeconds: 5,
+                          failureThreshold: 48
+                        }
+                      ]
+                  )
+                }
+              }
+          ' "$current" > "$desired" 2>/dev/null; then
+            echo "::error::Could not prepare the new definition: the app does not have exactly one container with ingress."
+            exit 1
+          fi
+
+          previous_image="$(jq -r '.properties.template.containers[0].image // ""' "$current")"
+          previous_revision="$(jq -r '.properties.latestRevisionName // ""' "$current")"
+
+          "$RUNNER_TEMP/az-quiet" - containerapp update \
+            --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --yaml "$desired" --output none
+
+          # Wait until the latest revision is the ready one and runs the verified image.
+          # If it never becomes ready, Container Apps keeps traffic on the previous
+          # revision, and this job fails before the smoke test can pass on old code.
+          query="{latest: properties.latestRevisionName, ready: properties.latestReadyRevisionName, image: properties.template.containers[0].image, port: properties.configuration.ingress.targetPort}"
+          deadline=$((SECONDS + 300))
+          is_ready="false"
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            "$RUNNER_TEMP/az-quiet" "$state" containerapp show \
+              --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "$query" --output json
+            latest="$(jq -r '.latest // ""' "$state")"
+            ready="$(jq -r '.ready // ""' "$state")"
+            image="$(jq -r '.image // ""' "$state")"
+            port="$(jq -r '.port // ""' "$state")"
+            if [ -n "$latest" ] && [ "$latest" = "$ready" ] && [ "$image" = "$target" ] && [ "$port" = "8000" ]; then
+              # A changed image always makes a new revision, so the old name must be gone.
+              if [ "$previous_image" = "$target" ] || [ "$latest" != "$previous_revision" ]; then
+                is_ready="true"
+                break
+              fi
+            fi
+            sleep 10
+          done
+          if [ "$is_ready" != "true" ]; then
+            echo "::error::The new revision did not become ready within five minutes. Traffic stays on the previous revision."
+            exit 1
+          fi
+          echo "The latest revision is ready and runs the verified image."
+
+      # warm route: one replica stays running on the current image. Nothing else changes.
+      - name: Keep one replica warm
+        if: steps.route.outputs.route == 'warm'
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/az-quiet" - containerapp update \
+            --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --min-replicas 1 --output none
+          echo "Minimum replicas set to 1 on the current image."
+
+      - name: Check out (for the smoke test)
+        if: steps.route.outputs.route != 'warm'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        if: steps.route.outputs.route != 'warm'
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.route.outputs.route != 'warm'
+        run: uv sync --locked
+
+      # Health, two golden cases and one injection case against the live app, with a
+      # 60 second allowance for a cold start. The host name is masked and the demo
+      # token comes from the environment secret; the script never prints it.
+      - name: Smoke test the live app
+        if: steps.route.outputs.route != 'warm'
+        env:
+          DEMO_TOKEN: ${{ secrets.DEMO_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          host_file="$RUNNER_TEMP/app-host.txt"
+          trap 'rm -f "$host_file"' EXIT
+          "$RUNNER_TEMP/az-quiet" "$host_file" containerapp show \
+            --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn --output tsv
+          host="$(tr -d '[:space:]' < "$host_file")"
+          if ! [[ "$host" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::The app reported no usable host name."
+            exit 1
+          fi
+          echo "::add-mask::${host}"
+          uv run python scripts/smoke.py --remote --base-url "https://${host}" --cold-start-seconds 60
+
+      - name: Summarise
+        env:
+          ROUTE: ${{ steps.route.outputs.route }}
+          IMAGE: ${{ steps.route.outputs.image }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          SOURCE_SHA: ${{ steps.route.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Deploy"
+            echo ""
+            echo "- Route: ${ROUTE}"
+            if [ "$ROUTE" = "warm" ]; then
+              echo "- Minimum replicas set to 1 on the current image. No image was built or changed."
+            else
+              echo "- Image: ${IMAGE}@${DIGEST}"
+              echo "- Built from commit: ${SOURCE_SHA}"
+              echo "- Build provenance verified before any change. The new revision became ready and the smoke test passed."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
