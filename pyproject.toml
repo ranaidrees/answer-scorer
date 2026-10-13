@@ -66,8 +66,8 @@ help = "Run the test suite."
 cmd = "pytest"
 
 [tool.poe.tasks.eval]
-help = "Run the offline eval suite against the live model deployment."
-cmd = "python -c \"print('not yet implemented')\""
+help = "Run the eval suite and the gate against the live model deployment. Add --fake for an offline dry run, or --suite and --split for a partial run."
+cmd = "python -m evals.run_evals"
 
 [tool.poe.tasks.run]
 help = "Run the API and demo page on http://localhost:8000, with settings from .env.local."

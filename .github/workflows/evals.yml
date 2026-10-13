@@ -1,0 +1,134 @@
+name: evals
+
+# The eval gate (spec sections 7 and 9). One job, `evals`, which always runs and always
+# reports: on every pull request, nightly against the pinned deployment, and on demand.
+on:
+  pull_request:
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC
+  workflow_dispatch:
+
+# Caches may be restored but never saved: this workflow never runs on a push to `main`.
+cache-mode: read
+
+permissions: {}
+
+# One run per pull request. A new push cancels the run for the push before it, so a
+# superseded commit calls the model no further. Nightly and manual runs are not cancelled.
+concurrency:
+  group: evals-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  evals:
+    name: evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in as the eval identity
+      pull-requests: write # the one report comment
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Always reports. On a pull request with no change to a prompt, rubric, scorer, eval
+      # or price file it writes a "no relevant changes" summary and every later step is
+      # skipped, so the job succeeds without a sign-in or a model call. A pull request from
+      # a fork gets no OIDC token and no secrets: if it changes a relevant path this step
+      # fails, because the gate cannot be proven. Values from the pull request reach the
+      # script through the environment only, never through an expression in `run`.
+      - name: Check changed paths
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: python3 evals/changed_paths.py
+
+      - name: Sign in to Azure as the eval identity (OIDC)
+        if: steps.paths.outputs.run == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_EVAL }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up uv
+        if: steps.paths.outputs.run == 'true'
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.paths.outputs.run == 'true'
+        run: uv sync --locked
+
+      # A full run: every suite and every split. The step fails when the gate fails, and
+      # when the model is unavailable (no report, no invented score). It appends the report
+      # to the job summary and sends one `eval_run` event. Nothing here echoes a value.
+      - name: Run the evals
+        id: run
+        if: steps.paths.outputs.run == 'true'
+        env:
+          FOUNDRY_ENDPOINT: ${{ vars.FOUNDRY_ENDPOINT }}
+          MODEL_DEPLOYMENT: ${{ vars.MODEL_DEPLOYMENT }}
+          MODEL_VERSION: ${{ vars.MODEL_VERSION }}
+          APPLICATIONINSIGHTS_CONNECTION_STRING: ${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+          # Fixed and not a secret: the eval answers are synthetic and public.
+          ANSWER_HASH_SALT: ci-evals-synthetic-answers
+          EVAL_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: uv run poe eval --emit-event
+
+      - name: Upload the report
+        if: ${{ !cancelled() && steps.run.outputs.report_md != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: eval-report
+          path: |
+            ${{ steps.run.outputs.report_md }}
+            ${{ steps.run.outputs.report_json }}
+          if-no-files-found: error
+
+      # One comment per pull request, updated in place. It carries the report's summary
+      # section only: metrics, row ids and scores, never text from an answer. A problem
+      # posting the comment does not change the gate result.
+      - name: Comment on the pull request
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.paths.outputs.run == 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPORT_MD: ${{ steps.run.outputs.report_md }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          marker='<!-- answer-scorer-evals -->'
+          body="$RUNNER_TEMP/eval-comment.md"
+          {
+            echo "$marker"
+            if [ -n "${REPORT_MD:-}" ] && [ -f "$REPORT_MD" ]; then
+              sed -n '/<!-- eval-summary:start -->/,/<!-- eval-summary:end -->/p' "$REPORT_MD"
+            else
+              echo "## Eval gate: NOT EVALUATED"
+              echo
+              echo "The eval run did not finish, so there is no report and the gate is not passed."
+            fi
+            echo
+            echo "[Workflow run]($RUN_URL). The full report is in the job summary and in the eval-report artifact."
+          } > "$body"
+          comment_id="$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- answer-scorer-evals -->"))) | .id' \
+            | tail -n 1)"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/$comment_id" -F "body=@$body" > /dev/null
+          else
+            gh api --method POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F "body=@$body" > /dev/null
+          fi
