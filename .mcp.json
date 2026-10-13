@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "microsoft-learn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
+    },
+    "azure": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@azure/mcp@latest", "server", "start", "--read-only"]
+    }
+  }
+}

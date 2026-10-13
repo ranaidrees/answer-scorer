@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(uv run poe check)",
+      "Bash(uv run poe test)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)",
+      "PowerShell(uv run poe check)",
+      "PowerShell(uv run poe test)",
+      "PowerShell(git status)",
+      "PowerShell(gh pr view *)",
+      "mcp__microsoft-learn",
+      "mcp__azure"
+    ],
+    "deny": [
+      "Read(.env*)",
+      "Read(**/.env*)",
+      "Read(**/*.pem)",
+      "Read(private/**)",
+      "Bash(azd up*)",
+      "Bash(azd deploy*)",
+      "Bash(azd down*)",
+      "Bash(az group delete*)",
+      "Bash(az account set*)",
+      "Bash(gh repo delete*)",
+      "PowerShell(azd up*)",
+      "PowerShell(azd deploy*)",
+      "PowerShell(azd down*)",
+      "PowerShell(az group delete*)",
+      "PowerShell(az account set*)",
+      "PowerShell(gh repo delete*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": ["run", "--no-project", "python", "${CLAUDE_PROJECT_DIR}/.claude/hooks/cloud_gate.py"],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": ["run", "--no-project", "python", "${CLAUDE_PROJECT_DIR}/.claude/hooks/protect_evidence.py"],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": ["run", "--no-project", "python", "${CLAUDE_PROJECT_DIR}/.claude/hooks/format_py.py"],
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+[project]
+name = "answer-scorer"
+version = "0.1.0"
+description = "AI answer scorer with a trust harness. Reference implementation, synthetic data only."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.34",
+    "pytest>=8.3",
+    "pyyaml>=6.0",
+    "ruff>=0.9",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".claude/worktrees", ".azure"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# Line length is the formatter's job; long string literals are left alone.
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+norecursedirs = [".claude/worktrees", ".venv", ".azure"]
+addopts = "-q"
+
+[tool.poe.tasks.check]
+help = "Lint, format check and all tests (including hook tests). Healthy output ends with 'passed'."
+sequence = [
+    { cmd = "ruff check ." },
+    { cmd = "ruff format --check ." },
+    { cmd = "pytest" },
+]
+
+[tool.poe.tasks.test]
+help = "Run the test suite."
+cmd = "pytest"
+
+[tool.poe.tasks.eval]
+help = "Run the offline eval suite against the live model deployment."
+cmd = "python -c \"print('not yet implemented')\""
+
+[tool.poe.tasks.run]
+help = "Run the API and demo page locally."
+cmd = "python -c \"print('not yet implemented')\""
+
+[tool.poe.tasks.smoke]
+help = "Smoke test against the locally running app."
+cmd = "python -c \"print('not yet implemented')\""
+
+[tool.poe.tasks.smoke-remote]
+help = "Smoke test against the live URL."
+cmd = "python -c \"print('not yet implemented')\""

@@ -1,0 +1,8 @@
+# A signal of ownership. It is not enforceable in a solo repository.
+/prompts/    @ranaidrees
+/rubrics/    @ranaidrees
+/evals/      @ranaidrees
+/.claude/    @ranaidrees
+/CLAUDE.md   @ranaidrees
+/REVIEW.md   @ranaidrees
+/infra/      @ranaidrees
