@@ -10,38 +10,39 @@ A small reference implementation of governed AI output for a high-stakes decisio
 
 Every eval figure comes from a full run against the pinned model deployment (gpt-5.4-mini, version 2026-03-17) on synthetic answers that Claude wrote and labelled. The figures show that the gate and the controls behave consistently. They do not show that the scores are right: reliability is not validity. Each figure has its n beside it, and there are no confidence intervals because 30 answers are too few for a reliable one.
 
-Where a cell holds two figures, the first is the first live run (in CI, on pull request [#9](https://github.com/ranaidrees/answer-scorer/pull/9)) and the second is stability run 1 of 3 (local).
+Cells for the accepted prompt hold the three consecutive runs that make up its stability proof, in order. The first live run, in CI on pull request [#9](https://github.com/ranaidrees/answer-scorer/pull/9), also met every threshold; the [eval card](docs/eval_card.md) has all eight runs.
 
 **The eval gate: the accepted prompt against a deliberately weakened one**
 
-| | Accepted prompt `v1` (not tuned) | Weakened prompt `v0-weak` |
+| | Accepted prompt `v1` (never tuned, never changed) | Weakened prompt `v0-weak` |
 |---|---|---|
-| Gate result | PASS, PASS. [[PENDING: gate results of stability runs 2 and 3]] | [[PENDING: gate results of the three weak-prompt runs]] |
-| Quadratic weighted kappa against labels (n=30, gate at least 0.70) | 0.926, 0.914 | [[PENDING: weak-prompt kappa in each of three runs]] |
-| Ungrounded quote rate (gate at most 2% of quotes) | 0 of 338, 0 of 338 | [[PENDING: weak-prompt ungrounded quote rate in each of three runs]] |
-| Control-triggered review rate, golden set (n=30, gate at most 15%) | 1 of 30, 2 of 30 | [[PENDING: weak-prompt control-triggered review rate in each of three runs]] |
-| Gated metrics breached | none, none | [[PENDING: which gated metrics the weak prompt breaches]] |
+| Gate result | PASS, PASS, PASS on one commit, at the third attempt (decision S4c-7) | [[PENDING: gate results of the three weak-prompt runs]] |
+| Quadratic weighted kappa against labels (n=30, gate at least 0.70) | 0.926, 0.947, 0.926 | [[PENDING: weak-prompt kappa in each of three runs]] |
+| Ungrounded quote rate (gate at most 2% of quotes) | 0 of 341, 0 of 332, 1 of 327 | [[PENDING: weak-prompt ungrounded quote rate in each of three runs]] |
+| Control-triggered review rate, golden set (n=30, gate at most 15%) | 0 of 30, 1 of 30, 2 of 30 | [[PENDING: weak-prompt control-triggered review rate in each of three runs]] |
+| Gated metrics breached | none in any of the three | [[PENDING: which gated metrics the weak prompt breaches]] |
 
 **Everything else**
 
 | Measure | Result | Where it comes from |
 |---|---|---|
-| Exact agreement with labels (n=30, gate at least 55%) | 25 of 30, 24 of 30 | [Eval card](docs/eval_card.md) |
-| Within-1 agreement (n=30, gate at least 90%) | 29 of 30, 29 of 30 | [Eval card](docs/eval_card.md) |
-| Noise floor: answers whose three runs disagree (n=90, reported, not gated) | 14 of 90 (15.6%), 13 of 90 (14.4%) | [Eval card](docs/eval_card.md) |
-| Fairness flip rate: pairs whose medians differ (n=16, reported, not gated) | 0 of 16, 1 of 16 (6.2%): under the noise floor both times | [Eval card](docs/eval_card.md) |
-| Identity pairs, mean absolute difference (n=8, gate at most 0.25) | 0.000, 0.125 (largest pair difference 1) | [Fairness pairs](evals/datasets/fairness_pairs.jsonl) |
-| Dialect and verbosity pairs, mean absolute difference (n=8, gate at most 0.25) | 0.000, 0.000 | [Fairness pairs](evals/datasets/fairness_pairs.jsonl) |
-| Injection cases flagged and routed (n=18, gate 100%) | 18 of 18, 18 of 18 | [Injection set](evals/datasets/injection.jsonl) |
-| Edge cases with the expected behaviour (n=6, gate 100%) | 6 of 6, 6 of 6 | [Edge cases](evals/datasets/edge_cases.jsonl) |
+| Exact agreement with labels (n=30, gate at least 55%) | 25, 27 and 25 of 30 | [Eval card](docs/eval_card.md) |
+| Within-1 agreement (n=30, gate at least 90%) | 29 of 30 each time | [Eval card](docs/eval_card.md) |
+| Noise floor: answers whose three runs disagree (n=90, reported, not gated) | 16, 18 and 18 of 90 (18% to 20%) | [Eval card](docs/eval_card.md) |
+| Fairness flip rate: pairs whose medians differ (n=16, reported, not gated) | 2, 0 and 2 of 16: under the noise floor each time | [Eval card](docs/eval_card.md) |
+| Identity pairs, mean absolute difference (n=8, gate at most 0.25) | 0.250, 0.000, 0.125 (largest pair difference 1). The first sits exactly on the limit: see [Known limits](#known-limits) | [Fairness pairs](evals/datasets/fairness_pairs.jsonl) |
+| Dialect and verbosity pairs, mean absolute difference (n=8, gate at most 0.25) | 0.000, 0.000, 0.125 | [Fairness pairs](evals/datasets/fairness_pairs.jsonl) |
+| Injection cases flagged and routed (n=18, gate 100%) | 18 of 18 each time | [Injection set](evals/datasets/injection.jsonl) |
+| Edge cases with the expected behaviour (n=6, gate 100%) | 6 of 6 each time | [Edge cases](evals/datasets/edge_cases.jsonl) |
+| Attempts needed for the stability proof | 3. Attempt 1 ended in a failed run and attempt 2 in a stopped run; both were fixed in code, never in a threshold, dataset, rubric or prompt | [Eval card](docs/eval_card.md#stability-proof) |
 | Label audit agreement | 30 of 30 between two Claude agents, one of them blind. No person labelled or reviewed the answers | [Label audit](evals/label_audit.md) |
 | p95 latency (SLO: at or under 6 s, warm) | [[PENDING: p95 latency from warm traffic on the deployed app]]. Local proof only so far: 7 scores, median 2.2 s (decision S3-13) | [SLOs](docs/slo.md) |
 | Cost per score (estimate from published prices) | About 0.004 GBP on ten local requests (decision S6-6). [[PENDING: cost per score from live traffic]] | [Prices](config/prices.yaml) |
 | Review rate on live traffic (band: at or under 25%) | [[PENDING: control-triggered review rate on live traffic]] | [SLOs](docs/slo.md) |
-| Cost of one full eval run (estimate) | About 0.43 GBP | Pull request [#9](https://github.com/ranaidrees/answer-scorer/pull/9) |
+| Cost of one full eval run (upper estimate) | About 0.43 GBP: 400,338 tokens in and about 58,500 out, priced as uncached | [Prices](config/prices.yaml) |
 | Total Azure spend (limit: 10 GBP) | [[PENDING: total spend at the freeze]] | [Architecture](docs/architecture.md#spend-controls) |
 | Pull requests | 10 slice pull requests open and checked so far (#2 to #11) | [How it was built](#how-it-was-built) |
-| Important review findings fixed | 12 so far (S1 1, V 2, S2 4, S3 1, S4b 3, S5a 1) | Review comments on each pull request |
+| Important review findings fixed | 13 so far (S1 1, V 2, S2 4, S3 1, S4b 3, S5a 1, S6 1) | Review comments on each pull request |
 | Verifier catches | 3 FAIL verdicts, all on the S0 cloud gate, each fixed with tests (decisions D13, D17, D18) | [Decisions](intent/decisions.md) |
 
 [[PENDING: final counts of pull requests, Important findings fixed and verifier FAIL verdicts]]
@@ -58,6 +59,8 @@ From [the spec](intent/spec.md), section 6. The mapping from each failure mode t
 | Online evals | Reference-free checks on every live request (ungrounded, inconsistent, injection, guardrail and protected-term rates, review rate), emitted as telemetry and shown on the dashboard with SLO bands and alerts | Continuously, on live traffic |
 
 What happened in live testing of the injection sample (decision S3-12): our own screen flagged it, the answer was scored as data and kept the score of its clean twin, and it was routed to a person. Azure's guardrail did not block that sample in any of three sends. A guardrail block, if one happens, is handled as a routed outcome with no score; that path is proven by unit tests only.
+
+One guard was added after the spec's table was written. The stability proof showed the model was inconsistent on an answer that only repeats the question, so a deterministic question-echo check now flags such an answer as off topic and routes it, whatever the model says (decision S4c-3).
 
 ## Architecture
 
@@ -151,13 +154,15 @@ The first three are offline and need nothing else. A fake run says nothing about
 ## Known limits
 
 - **Synthetic data, one model family.** Claude wrote the answers, labelled them and audited the labels. Agreement of 30 of 30 between two agents of one family shows that the labels are consistent, not that they are right, and the golden set may be easier than real answers.
-- **The prompt was not tuned.** Prompt `v1` passed the gate on its first live run, so there is no tuning result to report. The deterministic screens were adjusted against `dev` rows (decisions S2-12 and S2-14).
+- **The prompt was not tuned.** Prompt `v1` passed the gate on its first live run and was never changed, so there is no tuning result to report. One golden `dev` answer is scored two levels under its label in most runs, and that is reported, not tuned away. The deterministic screens were adjusted against `dev` rows (decisions S2-12 and S2-14).
 - **Small numbers.** 30 golden answers and 16 pairs are too few for confidence intervals, and one answer moves agreement by more than three points.
+- **The gate is not flake-free.** The stability proof took three attempts. One run failed on an edge case where the model alone was inconsistent, and one run stopped when the model was unavailable; each was fixed in code, and only then did three runs pass in a row. The accepted prompt passed seven of its eight completed live runs.
+- **The pair gates have little headroom.** In two of those eight runs the identity-pair mean sat exactly on its 0.25 limit, with 2 of 8 pairs one level apart; one more flipped pair would have breached the gate. About one fairness pair in ten flips per run from model noise alone (11 flips in 128 pair-runs). The build's lead session estimates that roughly 1 full run in 20 would breach a pair gate with no change to the system: an estimate from eight runs, not a measured rate. A nightly failure on a pair gate alone should be run once more before it is read as a regression, and a production gate would use more pairs.
 - **Model variance is real.** In three live smoke runs the same strong sample scored 5 twice and 3 once. The three-run rule and the spread flag exist for that reason, and they do not remove it.
 - **The platform guardrail has not been seen to block.** Our own screen caught the injection sample in live testing; the guardrail-block path is proven by unit tests only.
 - **Hooks are guardrails, not a boundary** (decision D14). The hard limits are the ruleset, the owner-only deploy approval and the scope of each identity.
 - **Not live yet.** No deploy has happened, so latency, cost and review rate on live traffic are pending, and the alert email has not been delivered yet because its address awaits the owner's confirmation (decision S6-7).
-- **One log exposure.** Azure identifiers, not credentials, were printed in one workflow log; they are now held as secrets.
+- **One log exposure.** Azure identifiers, not credentials, were printed in one workflow log; they are now held as secrets (decision F-1).
 - **Scope.** English only, two generic competencies, no review queue, no real rater study and no formal compliance sign-off. See [docs/governance.md](docs/governance.md) for what production would add.
 
 ## Where to look

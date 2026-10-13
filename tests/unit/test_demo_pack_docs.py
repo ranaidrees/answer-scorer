@@ -34,6 +34,7 @@ REPOSITORY_URL = "https://github.com/ranaidrees/answer-scorer/"
 # Paths the documents name on purpose although this checkout does not hold them.
 NOT_IN_THIS_CHECKOUT = {
     "prompts/scorer/v0-weak.md",  # exists only on the weak-prompt branch (spec section 7)
+    "src/scorer/echo.py",  # added by S4c (decision S4c-3), which is stacked under this slice later
 }
 
 LINK = re.compile(r"!?\[(?P<text>[^\]]*)\]\((?P<target>[^)\s]+)\)")

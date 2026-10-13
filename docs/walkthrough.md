@@ -72,9 +72,10 @@ The page has three sample buttons after "Load a sample:". Each one fills the com
 
 ### 4. Test: the weakened prompt, blocked (3:30 to 5:00), pending
 
-- **Clicks.** Tab 5. Open the weak-prompt pull request. Show the changed files (a warmer prompt that asks for evidence "in your own words"), then the checks box with the required `evals` check in red and the merge button blocked, then the comment the `evals` job posted with the metrics that breached.
+- **Clicks.** Tab 5. Open the weak-prompt pull request. Show the changed files (a warmer prompt that asks for evidence "in your own words"), then the checks box: `ci` should be green and only the required `evals` check red, with the merge button blocked. Then open the comment the `evals` job posted with the metrics that breached.
 - **Say.** "A realistic 'friendlier' prompt change was blocked before merge by a deterministic check, not by a reviewer's opinion."
-- **Plan wording to confirm.** The plan adds "and the gate is proven stable". Say it only once this is filled in: [[PENDING: the three accepted-prompt runs all passed and the three weak-prompt runs all breached the gate, with the metrics that breached]]
+- **The honest version of "proven stable".** The accepted prompt passed three full runs in a row on one commit, but at the third attempt (decision S4c-7). Attempt 1 went pass, pass, fail: on an answer that only repeats the question the model was inconsistent, so a deterministic check now routes that case. Attempt 2 stopped when the model was unavailable on one input, with no report and no invented score, so the runner now retries an input that has no score. Nothing was loosened: the prompt, thresholds, datasets and rubrics are unchanged. If there is time, tell it; it is the best evidence that the gate is real. The table is under "Stability proof" in the [eval card](eval_card.md#stability-proof).
+- **Plan wording to confirm.** The plan adds "and the gate is proven stable". The weak-prompt half is still to come, so say it only once this is filled in: [[PENDING: the three weak-prompt runs all breached the gate, with the metrics that breached]]
 - **Fallback.** `07-weak-prompt-pr.png`, then the "Stability proof" table in the [eval card](eval_card.md). If the pull request does not exist yet, show the gate itself: [thresholds.yaml](../evals/thresholds.yaml) and the `evals` check on pull request [#9](https://github.com/ranaidrees/answer-scorer/pull/9), where the accepted prompt met every threshold.
 
 ### 5. Build: checks, provenance and the approval (5:00 to 6:00), pending live
@@ -101,7 +102,7 @@ The page has three sample buttons after "Load a sample:". Each one fills the com
 ### 8. Questions (8:00 to 10:00)
 
 - **Say.** "What production adds: trained raters, adverse impact analysis, a DPIA, and the 2 December 2027 date for the high-risk obligations."
-- **Have ready.** The limits, said plainly: synthetic data written, labelled and audited by one model family; a prompt that met the gate untuned, so the golden set may be easy; 30 answers, so no confidence intervals; the same answer can score differently between runs; hooks are guardrails, not a boundary. They are in the [eval card](eval_card.md) and the [governance note](governance.md).
+- **Have ready.** The limits, said plainly: synthetic data written, labelled and audited by one model family; a prompt that met the gate untuned, so the golden set may be easy; 30 answers, so no confidence intervals; the same answer can score differently between runs; the pair gates have little headroom, so roughly 1 full run in 20 might breach one from noise alone (an estimate from eight runs, not a measured rate); hooks are guardrails, not a boundary. They are in the [eval card](eval_card.md) and the [governance note](governance.md).
 
 ## The five-minute cut
 
