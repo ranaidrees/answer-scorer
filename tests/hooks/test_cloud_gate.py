@@ -618,6 +618,104 @@ def test_non_ascii_text_in_a_command_is_read_as_utf8() -> None:
     assert_allowed(gate("echo “curly quotes” and café"))
 
 
+# --- shapes the second verifier run found passing -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"gh api -X PATCH {REPO} -fvisibility=private",
+        f"gh api -X PATCH {REPO} -Fprivate=true",
+        f"gh api -X PATCH {REPO} -Farchived=true",
+        f"gh api -X DELETE /{REPO}",
+        f"gh api -X PATCH /{REPO} -f visibility=private",
+        f"gh api -X PATCH /{REPO} -f archived=true",
+        f"gh api -X DELETE https://api.github.com/{REPO}",
+        f"gh api -X PATCH https://api.github.com/{REPO} -f private=true",
+        "gh api -X DELETE repos/$OWNER/$REPO",
+        "gh api -X DELETE repos/$REPO",
+        'gh api -X DELETE "repos/${OWNER}/${REPO}"',
+        'gh api -X PATCH "repos/$env:OWNER/answer-scorer" -f private=true',
+        "gh api -X PATCH repos/$REPO -f visibility=private",
+    ],
+)
+@pytest.mark.parametrize("tool", ["Bash", "PowerShell"])
+def test_every_spelling_of_the_repository_path_is_read(command: str, tool: str) -> None:
+    assert_denied(gate(command, tool), "blocked")
+
+
+@pytest.mark.parametrize("prefix", ["/", "https://api.github.com/", ""])
+@pytest.mark.parametrize("key", ["private", "visibility", "archived"])
+def test_repo_bodies_are_read_for_every_path_spelling(
+    tmp_path: Path, prefix: str, key: str
+) -> None:
+    body = tmp_path / "repo.json"
+    body.write_text(json.dumps({key: True}), encoding="utf-8")
+    assert_denied(gate(f'gh api -X PATCH {prefix}{REPO} --input "{body}"'), "visibility")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"gh api /{REPO}",
+        f"gh api -X GET https://api.github.com/{REPO}",
+        f"gh api -X PATCH /{REPO} -f delete_branch_on_merge=true",
+        f"gh api -X PUT /{REPO}/vulnerability-alerts",
+        f"gh api /{REPO}/pulls/3/comments",
+        "gh api repos/$REPO/pulls",
+    ],
+)
+def test_harmless_calls_in_those_spellings_pass(command: str) -> None:
+    assert_allowed(gate(command))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"gh api -X GET -X DELETE {REPO}/rulesets/42",
+        f"gh api -X DELETE -X GET {REPO}/environments/demo",
+        f"gh api -X $METHOD {REPO}/rulesets/42",
+        f"gh api --method $METHOD {REPO}",
+        f"gh api -X $METHOD {REPO}/actions/runs/1/pending_deployments",
+    ],
+)
+def test_repeated_or_unreadable_methods_fail_closed(command: str) -> None:
+    assert_denied(gate(command), "blocked")
+
+
+def test_a_stray_quote_cannot_hide_later_commands(repo_on_main: Path) -> None:
+    broad = f"az role assignment create --assignee b --role Owner --scope {SUB_SCOPE}"
+    assert_denied(gate("# don't stop here\n" + GOOD_ROLE + "\n" + broad), "Owner, Contributor")
+    hidden_delete = f"gh api -X GET {REPO}/rulesets; gh api -X DELETE {REPO}/rulesets/42"
+    assert_denied(gate('echo "a \\" b"; ' + hidden_delete), "blocked")
+    push = "# it's fine\ngit push\necho done"
+    assert_denied(gate(push, cwd=str(repo_on_main)), "pushes to main")
+
+
+def test_a_stray_quote_cannot_make_a_compound_call_look_alone(tmp_path: Path) -> None:
+    path = _ruleset_file(tmp_path)
+    put = f'gh api -X PUT {REPO}/rulesets/42 --input "{path}"'
+    assert_denied(gate("# don't\n" + put + "\necho done"), "only command")
+
+
+@pytest.mark.parametrize("tool", ["Bash", "PowerShell"])
+@pytest.mark.parametrize(
+    ("command", "word"),
+    [
+        ('azd --cwd "my infra" deploy', "azd deploy"),
+        ("azd --cwd  infra  up", "azd up"),
+        ("azd -C 'my infra'   down --purge", "azd down"),
+    ],
+)
+def test_quoted_and_widely_spaced_flag_values_are_read(command: str, word: str, tool: str) -> None:
+    assert_denied(gate(command, tool), word)
+
+
+def test_the_at_alias_for_head_is_read(repo_on_main: Path, repo_on_branch: Path) -> None:
+    assert_denied(gate("git push origin @", cwd=str(repo_on_main)), "pushes to main")
+    assert_allowed(gate("git push origin @", cwd=str(repo_on_branch)))
+
+
 def test_the_gate_never_exits_1() -> None:
     result = run_hook("cloud_gate.py", {"tool_name": "Bash", "tool_input": {"command": 7}})
     assert result.returncode == 2

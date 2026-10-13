@@ -35,7 +35,8 @@ BROAD_ROLES = {
 }
 
 REQUIRED_RULE_TYPES = {"pull_request", "required_status_checks", "non_fast_forward", "deletion"}
-WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+UNREADABLE = "UNREADABLE"
+WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE", UNREADABLE}
 REPO_KEYS = ("private", "visibility", "archived")
 GRAPHQL_BLOCKED = (
     "approveDeployments",
@@ -53,7 +54,8 @@ GRAPHQL_BLOCKED = (
 
 # A tool name (optionally quoted, as in PowerShell's & "az.cmd"), then any global flags
 # or the PowerShell stop-parsing token before the subcommand.
-_FLAGS = r"(?:(?:--%|-{1,2}[\w-]+(?:[= ]\S+)?)\s+)*?"
+_VALUE = r"(?:\"[^\"]*\"|'[^']*'|\S+)"
+_FLAGS = r"(?:(?:--%|-{1,2}[\w-]+(?:(?:=|\s+)" + _VALUE + r")?)\s+)*?"
 _AZ = r"(?<![\w.-])az(?:\.cmd|\.exe)?[\"']?\s+" + _FLAGS
 _AZD = r"(?<![\w.-])azd(?:\.exe)?[\"']?\s+" + _FLAGS
 _GH = r"(?<![\w.-])gh(?:\.exe)?[\"']?\s+"
@@ -69,8 +71,7 @@ class Deny(Exception):
     """Raised with the reason a command is blocked."""
 
 
-def _segments(command: str) -> list[str]:
-    """Split a command line at ; & | and newlines that sit outside quotes."""
+def _split(command: str, *, respect_quotes: bool) -> list[str]:
     segments: list[str] = []
     current: list[str] = []
     quote = ""
@@ -79,7 +80,7 @@ def _segments(command: str) -> list[str]:
             if char == quote:
                 quote = ""
             current.append(char)
-        elif char in "\"'":
+        elif respect_quotes and char in "\"'":
             quote = char
             current.append(char)
         elif char in ";&|\n":
@@ -89,6 +90,19 @@ def _segments(command: str) -> list[str]:
             current.append(char)
     segments.append("".join(current))
     return [segment.strip() for segment in segments if segment.strip()]
+
+
+def _segments(command: str) -> tuple[list[str], bool]:
+    """Split a command line at ; & | and newlines, and say whether it is one command.
+
+    Quote tracking can be thrown by a stray apostrophe or an escaped quote, which would
+    glue later commands onto the first. So the rules run over both the quote-aware split
+    and a quote-blind one, and a command counts as standing alone only if both agree.
+    """
+    aware = _split(command, respect_quotes=True)
+    blind = _split(command, respect_quotes=False)
+    merged = list(dict.fromkeys(aware + blind))
+    return merged, len(aware) == 1 and len(blind) == 1
 
 
 def _option(command: str, *names: str) -> str | None:
@@ -103,9 +117,16 @@ def _option(command: str, *names: str) -> str | None:
 
 def _gh_api_method(command: str) -> str:
     """Work out the HTTP method the way gh does, including attached forms like -XDELETE."""
-    match = re.search(r"(?<![\w-])(?:--method(?:\s+|=)|-X\s*=?\s*)[\"']?([A-Za-z]+)", command)
-    if match:
-        return match.group(1).upper()
+    values = re.findall(r"(?<![\w-])(?:--method(?:\s+|=)|-X\s*=?\s*)[\"']?([^\s\"']*)", command)
+    methods = {value.upper() for value in values}
+    if any(not re.fullmatch(r"[A-Z]+", method) for method in methods):
+        return UNREADABLE
+    # gh uses the last method given; the gate takes the most dangerous one.
+    for method in ("DELETE", "PUT", "PATCH", "POST"):
+        if method in methods:
+            return method
+    if methods:
+        return "GET"
     if re.search(r"(?<![\w-])(?:-[fF]|--field|--raw-field|--input)(?![\w-])", command):
         return "POST"
     if re.search(r"(?<![\w-])-[fF]\S", command):
@@ -219,7 +240,7 @@ def _check_git(segment: str, cwd: str | None, moved: bool) -> None:
         target = ref.rsplit(":", 1)[-1]
         if target in (PROTECTED_BRANCH, f"refs/heads/{PROTECTED_BRANCH}"):
             raise Deny(to_main)
-        if target == "HEAD" and _implicit_push_target(cwd, moved) == PROTECTED_BRANCH:
+        if target in ("HEAD", "@") and _implicit_push_target(cwd, moved) == PROTECTED_BRANCH:
             raise Deny(to_main)
 
 
@@ -266,6 +287,22 @@ def _check_ruleset_body(body: dict, cwd: str | None) -> None:
         raise Deny("the main ruleset must keep 'evals' as a required check")
 
 
+def _names_repo_root(segment: str) -> bool:
+    """True if a token is the repository itself: repos/<owner>/<repo>, in any spelling.
+
+    Covers a leading slash, a full URL, gh placeholders and shell variables (where one
+    variable may stand for owner/repo), but not deeper paths such as .../pulls.
+    """
+    for token in segment.split():
+        path = re.sub(r"^https?://[^/]+", "", token.strip("\"'`()")).lstrip("/")
+        parts = path.split("/")
+        if parts[0] != "repos" or len(parts) < 2 or not all(parts[1:]):
+            continue
+        if len(parts) == 3 or (len(parts) == 2 and "$" in parts[1]):
+            return True
+    return False
+
+
 def _check_gh_api(segment: str, cwd: str | None, alone: bool) -> None:
     if not re.search(_GH + r"api\b", segment):
         return
@@ -285,16 +322,15 @@ def _check_gh_api(segment: str, cwd: str | None, alone: bool) -> None:
         raise Deny("deleting branch protection is blocked")
     ruleset = re.search(r"/rulesets/[^\s\"']+", segment)
     environment = re.search(r"/environments/[^\s\"'/]+(?=[\s\"']|$)", segment)
-    repo_root = re.search(
-        r"(?<![\w/])repos/(?:[\w.-]+|\{owner\}|:owner)/(?:[\w.-]+|\{repo\}|:repo)(?=[\s\"']|$)",
-        segment,
-    )
+    repo_root = _names_repo_root(segment)
     if not (ruleset or environment or repo_root):
         return
+    if method == UNREADABLE:
+        raise Deny("write the HTTP method out in full so the gate can read it: blocked")
     if method == "DELETE":
         raise Deny("deleting a repository, a ruleset or an environment is blocked")
     if repo_root:
-        if re.search(rf"\b({'|'.join(REPO_KEYS)})\b\s*[=\"]", segment):
+        if re.search(rf"({'|'.join(REPO_KEYS)})\s*[=\"]", segment):
             raise Deny("changing repository visibility is blocked")
         if _option(segment, "--input") and not alone:
             raise Deny("send a repository change as the only command in the call: blocked")
@@ -322,13 +358,13 @@ def check(payload: dict) -> None:
         raise Deny("no command found in the hook payload")
     command = command.replace("`\r\n", " ").replace("`\n", " ").replace("\\\n", " ")
     cwd = payload.get("cwd")
-    segments = _segments(command)
+    segments, alone = _segments(command)
     moved = bool(_MOVES.search(command))
     for segment in segments:
         _check_azure(segment)
         _check_git(segment, cwd, moved)
         _check_gh_repo(segment)
-        _check_gh_api(segment, cwd, alone=len(segments) == 1)
+        _check_gh_api(segment, cwd, alone=alone)
 
 
 def main() -> int:
