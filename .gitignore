@@ -1,0 +1,7 @@
+.env*
+.azure/
+private/
+.claude/worktrees/
+.claude/fix-mode
+__pycache__/
+.venv/
