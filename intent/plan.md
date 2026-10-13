@@ -230,8 +230,25 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Not started.
+Last updated: Tuesday 13 October 2026, 17:00 (unattended build, Phase 2).
+
+**Merged:** nothing yet beyond the intent commits.
+
+**In progress:** W0. S0 harness on branch `s0-harness`.
+
+**Done outside git (W0):**
+- Secret scanning with push protection, Dependabot alerts and approval for fork PR workflows from all outside contributors are on (checked with read-only `gh api` calls).
+- Model quota re-checked: UK South has 1,000 with 0 used (decision D1).
+
+**Next:** merge S0; switch on CodeQL default setup (decision D4); update and merge the GitHub app PR; ruleset on `main` and the `demo` environment; V.
+
+**Hooks:** proven by unit tests (decision D11). They also loaded in the build session as soon as `.claude/settings.json` existed, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The first verifier run on S0 returned FAIL for fail-open shapes in the gate; they were fixed with tests (decision D13). The full live proof in a fresh session stays a Phase 3 step.
+
+**Model spend estimate:** 0.00 GBP so far (no model calls yet). One nightly run: not yet measured.
+
+**Needs owner:** nothing yet.
 
 ## Deviations
 
-None yet.
+- No separate `plan/wave-N` pull requests in the unattended build (decision D12).
+- Branches are never force pushed, so a pushed branch is brought up to date by merging `main` rather than rebasing (decision D9).
