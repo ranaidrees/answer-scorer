@@ -16,7 +16,7 @@ Both labellers are the same model family as each other, and a different family f
 
 Full agreement on 30 answers is weaker evidence than it looks: each rubric carries an explicit level rule, the generator wrote each answer to meet that rule, and the auditor applied the same rule. It says the rule is clear enough to be applied the same way twice. It is also a sign that the golden set may be easier than real answers, which the eval card must state as a limitation.
 
-A second check, by the independent reviewer of this pull request, also labelled all 30 answers from shuffled neutral ids before reading the labels, and agreed on all 30. The same caveat applies.
+A second check, by the independent reviewer of this pull request, also labelled all 30 answers from shuffled neutral ids before reading the labels, and agreed on all 30. That reviewer was a read-only subagent of the build session, not a person, and its result is recorded in the "Verifier and review record for S4a" comment on pull request #6. The same caveat applies.
 
 ## Every answer
 
