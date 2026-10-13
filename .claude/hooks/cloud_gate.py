@@ -4,12 +4,18 @@ Reads the hook payload from stdin. Exit 0 lets the call continue to the normal
 permission flow. Exit 2 blocks it, with the reason on stderr. Any error also
 exits 2 (fail closed), because exit 1 would not block.
 
-This is a guardrail, not a security boundary: see intent/spec.md section 10.
+The command is split into segments at shell separators outside quotes, and every
+rule runs on every segment, so a blocked command cannot hide behind an allowed one.
+
+Known limits: the gate matches text, so it also fires on blocked commands quoted in
+prose (pass long text with a file instead), and it does not see what a script does
+once it runs. It is a guardrail, not a security boundary: see intent/spec.md section 10.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -30,10 +36,59 @@ BROAD_ROLES = {
 
 REQUIRED_RULE_TYPES = {"pull_request", "required_status_checks", "non_fast_forward", "deletion"}
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+REPO_KEYS = ("private", "visibility", "archived")
+GRAPHQL_BLOCKED = (
+    "approveDeployments",
+    "rejectDeployments",
+    "deleteRepositoryRuleset",
+    "updateRepositoryRuleset",
+    "deleteEnvironment",
+    "updateEnvironment",
+    "deleteBranchProtectionRule",
+    "updateBranchProtectionRule",
+    "deleteRepository",
+    "updateRepository",
+    "archiveRepository",
+)
+
+# A tool name (optionally quoted, as in PowerShell's & "az.cmd"), then any global flags
+# or the PowerShell stop-parsing token before the subcommand.
+_FLAGS = r"(?:(?:--%|-{1,2}[\w-]+(?:[= ]\S+)?)\s+)*?"
+_AZ = r"(?<![\w.-])az(?:\.cmd|\.exe)?[\"']?\s+" + _FLAGS
+_AZD = r"(?<![\w.-])azd(?:\.exe)?[\"']?\s+" + _FLAGS
+_GH = r"(?<![\w.-])gh(?:\.exe)?[\"']?\s+"
+_GIT = r"(?<![\w.-])git(?:\.exe)?[\"']?\s+"
+_MOVES = re.compile(
+    r"(?<![\w.-])(?:cd|pushd|popd|chdir|Set-Location|Push-Location|sl)(?![\w-])"
+    r"|(?<![\w.-])git(?:\.exe)?[\"']?\s+(?:\S+\s+)*?(?:checkout|switch|-C|--git-dir|--work-tree)(?![\w-])",
+    re.IGNORECASE,
+)
 
 
 class Deny(Exception):
     """Raised with the reason a command is blocked."""
+
+
+def _segments(command: str) -> list[str]:
+    """Split a command line at ; & | and newlines that sit outside quotes."""
+    segments: list[str] = []
+    current: list[str] = []
+    quote = ""
+    for char in command:
+        if quote:
+            if char == quote:
+                quote = ""
+            current.append(char)
+        elif char in "\"'":
+            quote = char
+            current.append(char)
+        elif char in ";&|\n":
+            segments.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    segments.append("".join(current))
+    return [segment.strip() for segment in segments if segment.strip()]
 
 
 def _option(command: str, *names: str) -> str | None:
@@ -47,10 +102,13 @@ def _option(command: str, *names: str) -> str | None:
 
 
 def _gh_api_method(command: str) -> str:
-    method = _option(command, "--method", "-X")
-    if method:
-        return method.upper()
-    if re.search(r"(?<![\w-])(-f|-F|--field|--raw-field|--input)(\s|=)", command):
+    """Work out the HTTP method the way gh does, including attached forms like -XDELETE."""
+    match = re.search(r"(?<![\w-])(?:--method(?:\s+|=)|-X\s*=?\s*)[\"']?([A-Za-z]+)", command)
+    if match:
+        return match.group(1).upper()
+    if re.search(r"(?<![\w-])(?:-[fF]|--field|--raw-field|--input)(?![\w-])", command):
+        return "POST"
+    if re.search(r"(?<![\w-])-[fF]\S", command):
         return "POST"
     return "GET"
 
@@ -72,38 +130,39 @@ def _load_input_file(command: str, cwd: str | None) -> dict:
     return body
 
 
-def _check_azure(command: str) -> None:
-    az = r"\baz(?:\.cmd|\.exe)?\s+"
-    azd = r"\bazd(?:\.exe)?\s+"
-    match = re.search(azd + r"(up|deploy|down)\b", command, re.IGNORECASE)
+def _check_azure(segment: str) -> None:
+    match = re.search(_AZD + r"(up|deploy|down)\b", segment, re.IGNORECASE)
     if match:
         raise Deny(
             f"'azd {match.group(1).lower()}' is blocked: the application deploys only "
             "through GitHub Actions, and teardown is the owner's job"
         )
-    if re.search(az + r"group\s+delete\b", command, re.IGNORECASE):
+    if re.search(_AZ + r"group\s+delete\b", segment, re.IGNORECASE):
         raise Deny("'az group delete' is blocked: the agent never deletes a resource group")
-    if re.search(az + r"account\s+set\b", command, re.IGNORECASE):
+    if re.search(_AZ + r"account\s+set\b", segment, re.IGNORECASE):
         raise Deny("'az account set' is blocked: the agent never switches the subscription")
-    if re.search(az + r"role\s+assignment\s+create\b", command, re.IGNORECASE):
-        _check_role_assignment(command)
+    if re.search(_AZ + r"role\s+assignment\s+create\b", segment, re.IGNORECASE):
+        _check_role_assignment(segment)
 
 
-def _check_role_assignment(command: str) -> None:
-    role = (_option(command, "--role") or "").strip().lower()
+def _check_role_assignment(segment: str) -> None:
+    role = (_option(segment, "--role") or "").strip().lower()
     if not role:
         raise Deny("role assignment has no --role the gate can read")
+    if "$" in role or "`" in role:
+        raise Deny("write the role name out in full so the gate can read it")
     if role.rsplit("/", 1)[-1] in BROAD_ROLES:
         raise Deny(
             "role assignments granting Owner, Contributor or User Access Administrator are blocked"
         )
-    scope = _option(command, "--scope")
-    group = _option(command, "--resource-group", "-g")
-    if scope is None and group is None:
+    scope = _option(segment, "--scope")
+    if scope is None:
         raise Deny("role assignment without --scope targets the subscription: blocked")
-    if scope and scope.startswith("/") and "/resourcegroups/" not in scope.lower():
-        raise Deny("role assignment scope is wider than the project resource group: blocked")
-    if PROJECT_RESOURCE_GROUP not in command.lower():
+    if "$" in scope or "`" in scope:
+        raise Deny("write the --scope out in full so the gate can read it")
+    inside = f"/resourcegroups/{PROJECT_RESOURCE_GROUP}"
+    lowered = scope.lower()
+    if not (lowered.endswith(inside) or inside + "/" in lowered):
         raise Deny(f"role assignment must be scoped inside {PROJECT_RESOURCE_GROUP}: blocked")
 
 
@@ -121,47 +180,72 @@ def _current_branch(cwd: str | None) -> str:
     return result.stdout.strip()
 
 
-def _check_git(command: str, cwd: str | None) -> None:
-    for match in re.finditer(
-        r"\bgit(?:\.exe)?\s+(?:-\S+\s+(?:\S+\s+)?)*?push\b([^;&|\n]*)", command
+def _implicit_push_target(cwd: str | None, moved: bool) -> str:
+    """The branch a bare or HEAD push would send, if the gate can know it."""
+    if moved:
+        raise Deny(
+            "name the branch in the push: this command changes folder or branch first, "
+            "so the gate cannot tell what a bare push would send"
+        )
+    return _current_branch(cwd)
+
+
+def _check_git(segment: str, cwd: str | None, moved: bool) -> None:
+    match = re.search(_GIT + r"(?:-\S+\s+(?:\S+\s+)?)*?push\b(.*)", segment, re.DOTALL)
+    if not match:
+        return
+    to_main = "pushes to main are blocked: every change goes through a pull request"
+    args = [arg.strip("\"'`()") for arg in match.group(1).split()]
+    args = [arg for arg in args if arg and "<" not in arg and ">" not in arg]
+    flags = [arg for arg in args if arg.startswith("-")]
+    refs = [arg for arg in args if not arg.startswith("-")]
+    if any(
+        flag == "--force"
+        or flag.startswith("--force-")
+        or re.fullmatch(r"-[A-Za-z]*f[A-Za-z]*", flag)
+        for flag in flags
     ):
-        args = match.group(1).split()
-        flags = [arg for arg in args if arg.startswith("-")]
-        refs = [arg.strip("\"'") for arg in args if not arg.startswith("-")]
-        if any(
-            flag == "--force"
-            or flag.startswith("--force-")
-            or re.fullmatch(r"-[A-Za-z]*f[A-Za-z]*", flag)
-            for flag in flags
-        ):
-            raise Deny("force pushes are blocked")
-        if any(flag in ("--mirror", "--all") for flag in flags):
-            raise Deny("'git push --mirror' and '--all' are blocked: they can push to main")
-        refspecs = refs[1:]
-        if any(ref.startswith("+") for ref in refspecs):
-            raise Deny("force pushes are blocked")
-        if not refspecs:
-            if _current_branch(cwd) == PROTECTED_BRANCH:
-                raise Deny("pushes to main are blocked: every change goes through a pull request")
-            continue
-        for ref in refspecs:
-            target = ref.rsplit(":", 1)[-1]
-            if target in (PROTECTED_BRANCH, f"refs/heads/{PROTECTED_BRANCH}"):
-                raise Deny("pushes to main are blocked: every change goes through a pull request")
-            if target == "HEAD" and _current_branch(cwd) == PROTECTED_BRANCH:
-                raise Deny("pushes to main are blocked: every change goes through a pull request")
+        raise Deny("force pushes are blocked")
+    if any(flag in ("--mirror", "--all") for flag in flags):
+        raise Deny("'git push --mirror' and '--all' are blocked: they can push to main")
+    refspecs = refs[1:]
+    if any(ref.startswith("+") for ref in refspecs):
+        raise Deny("force pushes are blocked")
+    if not refspecs:
+        if _implicit_push_target(cwd, moved) == PROTECTED_BRANCH:
+            raise Deny(to_main)
+        return
+    for ref in refspecs:
+        target = ref.rsplit(":", 1)[-1]
+        if target in (PROTECTED_BRANCH, f"refs/heads/{PROTECTED_BRANCH}"):
+            raise Deny(to_main)
+        if target == "HEAD" and _implicit_push_target(cwd, moved) == PROTECTED_BRANCH:
+            raise Deny(to_main)
 
 
-def _check_gh_repo(command: str) -> None:
-    if re.search(r"\bgh(?:\.exe)?\s+repo\s+delete\b", command):
+def _check_gh_repo(segment: str) -> None:
+    if re.search(_GH + r"repo\s+delete\b", segment):
         raise Deny("'gh repo delete' is blocked")
-    if re.search(r"\bgh(?:\.exe)?\s+repo\s+edit\b[^;&|\n]*--visibility", command):
+    if re.search(_GH + r"repo\s+edit\b.*--visibility", segment, re.DOTALL):
         raise Deny("changing repository visibility is blocked")
-    if re.search(r"\bgh(?:\.exe)?\s+repo\s+(archive|rename)\b", command):
+    if re.search(_GH + r"repo\s+(archive|rename)\b", segment):
         raise Deny("archiving or renaming the repository is blocked")
 
 
-def _check_ruleset_body(body: dict) -> None:
+def _evals_gate_exists(cwd: str | None) -> bool:
+    root = os.environ.get("CLAUDE_PROJECT_DIR") or cwd
+    return bool(root) and (Path(root) / ".github" / "workflows" / "evals.yml").is_file()
+
+
+def _check_ruleset_body(body: dict, cwd: str | None) -> None:
+    if body.get("target") != "branch":
+        raise Deny("the main ruleset must keep target 'branch'")
+    ref_name = (body.get("conditions") or {}).get("ref_name") or {}
+    included = set(ref_name.get("include") or [])
+    if not included & {"~DEFAULT_BRANCH", "~ALL", f"refs/heads/{PROTECTED_BRANCH}"}:
+        raise Deny("the main ruleset must keep covering the default branch")
+    if ref_name.get("exclude"):
+        raise Deny("the main ruleset must not exclude any branch")
     if body.get("enforcement") != "active":
         raise Deny("the main ruleset must keep enforcement 'active'")
     if body.get("bypass_actors"):
@@ -178,37 +262,56 @@ def _check_ruleset_body(body: dict) -> None:
             contexts = {check.get("context") for check in checks if isinstance(check, dict)}
     if "ci" not in contexts:
         raise Deny("the main ruleset must keep 'ci' as a required check")
+    if "evals" not in contexts and _evals_gate_exists(cwd):
+        raise Deny("the main ruleset must keep 'evals' as a required check")
 
 
-def _check_gh_api(command: str, cwd: str | None) -> None:
-    if not re.search(r"\bgh(?:\.exe)?\s+api\b", command):
+def _check_gh_api(segment: str, cwd: str | None, alone: bool) -> None:
+    if not re.search(_GH + r"api\b", segment):
         return
-    method = _gh_api_method(command)
-    lowered = command.lower()
+    method = _gh_api_method(segment)
+    lowered = segment.lower()
+    if re.search(r"\bgraphql\b", lowered):
+        for name in GRAPHQL_BLOCKED:
+            if name.lower() in lowered:
+                raise Deny(f"the GraphQL mutation {name} is blocked")
     if "pending_deployments" in lowered and method != "GET":
         raise Deny("approving or rejecting a deployment is the owner's decision: blocked")
     if "deployment_protection_rule" in lowered and method != "GET":
         raise Deny("reviewing a deployment protection rule is blocked")
     if method not in WRITE_METHODS:
         return
-    if re.search(r"/rulesets/\d+", command):
-        if method == "DELETE":
-            raise Deny("deleting the main ruleset is blocked")
-        _check_ruleset_body(_load_input_file(command, cwd))
-    if re.search(r"/branches/[^/\s\"']+/protection", command) and method == "DELETE":
+    if re.search(r"/branches/[^/\s\"']+/protection", segment) and method == "DELETE":
         raise Deny("deleting branch protection is blocked")
-    environment = re.search(r"/environments/([\w.-]+)(?![\w./-])", command)
-    if environment:
-        if method == "DELETE":
-            raise Deny("deleting an environment is blocked")
-        if method == "PUT" and not _load_input_file(command, cwd).get("reviewers"):
-            raise Deny("an environment must keep its required reviewer: blocked")
-    repo_root = re.search(r"\brepos/[\w.-]+/[\w.-]+(?=[\s\"']|$)", command)
+    ruleset = re.search(r"/rulesets/[^\s\"']+", segment)
+    environment = re.search(r"/environments/[^\s\"'/]+(?=[\s\"']|$)", segment)
+    repo_root = re.search(
+        r"(?<![\w/])repos/(?:[\w.-]+|\{owner\}|:owner)/(?:[\w.-]+|\{repo\}|:repo)(?=[\s\"']|$)",
+        segment,
+    )
+    if not (ruleset or environment or repo_root):
+        return
+    if method == "DELETE":
+        raise Deny("deleting a repository, a ruleset or an environment is blocked")
     if repo_root:
-        if method == "DELETE":
-            raise Deny("deleting a repository is blocked")
-        if re.search(r"\b(private|visibility|archived)\b\s*[=\"]", command):
+        if re.search(rf"\b({'|'.join(REPO_KEYS)})\b\s*[=\"]", segment):
             raise Deny("changing repository visibility is blocked")
+        if _option(segment, "--input") and not alone:
+            raise Deny("send a repository change as the only command in the call: blocked")
+        if _option(segment, "--input") and any(
+            key in _load_input_file(segment, cwd) for key in REPO_KEYS
+        ):
+            raise Deny("changing repository visibility is blocked")
+        return
+    if not alone:
+        raise Deny(
+            "a ruleset or environment change must be the only command in the call, "
+            "so the gate checks exactly the body that is sent: blocked"
+        )
+    if ruleset:
+        _check_ruleset_body(_load_input_file(segment, cwd), cwd)
+    elif method == "PUT" and not _load_input_file(segment, cwd).get("reviewers"):
+        raise Deny("an environment must keep its required reviewer: blocked")
 
 
 def check(payload: dict) -> None:
@@ -217,17 +320,20 @@ def check(payload: dict) -> None:
     command = (payload.get("tool_input") or {}).get("command")
     if not isinstance(command, str):
         raise Deny("no command found in the hook payload")
-    command = command.replace("`\n", " ").replace("\\\n", " ")
+    command = command.replace("`\r\n", " ").replace("`\n", " ").replace("\\\n", " ")
     cwd = payload.get("cwd")
-    _check_azure(command)
-    _check_git(command, cwd)
-    _check_gh_repo(command)
-    _check_gh_api(command, cwd)
+    segments = _segments(command)
+    moved = bool(_MOVES.search(command))
+    for segment in segments:
+        _check_azure(segment)
+        _check_git(segment, cwd, moved)
+        _check_gh_repo(segment)
+        _check_gh_api(segment, cwd, alone=len(segments) == 1)
 
 
 def main() -> int:
     try:
-        payload = json.loads(sys.stdin.read())
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
         if not isinstance(payload, dict):
             raise Deny("hook payload is not a JSON object")
         check(payload)

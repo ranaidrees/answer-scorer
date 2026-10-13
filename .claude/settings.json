@@ -6,8 +6,6 @@
       "Bash(uv run poe check)",
       "Bash(uv run poe test)",
       "Bash(git status)",
-      "Bash(git diff *)",
-      "Bash(git log *)",
       "Bash(gh pr view *)",
       "Bash(gh pr checks *)",
       "Bash(gh pr list *)",
@@ -53,7 +51,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",

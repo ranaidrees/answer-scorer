@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Tuesday 13 October 2026, 17:15 (unattended build, Phase 2).
+Last updated: Tuesday 13 October 2026, 17:00 (unattended build, Phase 2).
 
 **Merged:** nothing yet beyond the intent commits.
 
@@ -242,7 +242,7 @@ Last updated: Tuesday 13 October 2026, 17:15 (unattended build, Phase 2).
 
 **Next:** merge S0; switch on CodeQL default setup (decision D4); update and merge the GitHub app PR; ruleset on `main` and the `demo` environment; V.
 
-**Hooks:** proven by unit tests only in this phase (decision D11). Live proof in a fresh session is a Phase 3 step.
+**Hooks:** proven by unit tests (decision D11). They also loaded in the build session as soon as `.claude/settings.json` existed, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The first verifier run on S0 returned FAIL for fail-open shapes in the gate; they were fixed with tests (decision D13). The full live proof in a fresh session stays a Phase 3 step.
 
 **Model spend estimate:** 0.00 GBP so far (no model calls yet). One nightly run: not yet measured.
 

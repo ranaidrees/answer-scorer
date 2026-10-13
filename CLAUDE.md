@@ -57,4 +57,7 @@ Before opening any PR:
 ## Known mistakes
 
 - Git Bash rewrites arguments that look like paths (`origin/branch:path`, `/subscriptions/...`). Set `MSYS_NO_PATHCONV=1` for `git show`, `gh api` and `az` commands that take such arguments.
+- The cloud gate matches text. A blocked command quoted inside a shell command (a heredoc, a PR body, a test string) is denied too. Write such text with the Edit or Write tool, and pass PR bodies with `--body-file`.
+- Ruleset and environment changes go as `gh api ... --input <file>`, alone in the call. Role assignments need a literal `--role` and a literal `--scope` inside the project resource group.
+- Squash merges pass `--author-email` with the GitHub no-reply address, plus `--subject` and `--body`.
 - Hooks, settings, agents and MCP servers load when a session starts. A change to them is proven by the hook tests, and live only in a new session.

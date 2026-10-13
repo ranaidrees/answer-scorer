@@ -33,7 +33,7 @@ GOOD_RULESET = {
 }
 
 
-def gate(command: str, tool: str = "Bash", cwd: str | None = None):
+def gate(command: str, tool: str = "Bash", cwd: str | None = None, env: dict | None = None):
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": tool,
@@ -41,7 +41,7 @@ def gate(command: str, tool: str = "Bash", cwd: str | None = None):
     }
     if cwd:
         payload["cwd"] = cwd
-    return run_hook("cloud_gate.py", payload)
+    return run_hook("cloud_gate.py", payload, env=env)
 
 
 def assert_denied(result, *words: str) -> None:
@@ -118,7 +118,7 @@ def test_broad_roles_are_denied_even_inside_the_resource_group(role: str) -> Non
     [
         (
             f'az role assignment create --assignee abc --role "Reader" --scope {SUB_SCOPE}',
-            "wider than the project resource group",
+            "must be scoped inside rg-answer-scorer-demo",
         ),
         ('az role assignment create --assignee abc --role "Reader"', "targets the subscription"),
         (
@@ -140,9 +140,6 @@ def test_role_assignments_outside_the_project_are_denied(command: str, word: str
         f"--scope {RG_SCOPE}/providers/Microsoft.CognitiveServices/accounts/example",
         'az role assignment create --assignee abc --role "Container Apps Contributor" '
         f"--scope {RG_SCOPE}/providers/Microsoft.App/containerApps/example",
-        "SCOPE=$(az containerapp show -g rg-answer-scorer-demo -n app --query id -o tsv) && "
-        'az role assignment create --assignee abc --role "Container Apps Contributor" '
-        '--scope "$SCOPE"',
         "az role assignment list --all",
     ],
 )
@@ -291,7 +288,7 @@ def test_reading_the_ruleset_passes() -> None:
 
 
 def test_deleting_the_ruleset_is_denied() -> None:
-    assert_denied(gate(f"gh api -X DELETE {REPO}/rulesets/42"), "deleting the main ruleset")
+    assert_denied(gate(f"gh api -X DELETE {REPO}/rulesets/42"), "ruleset")
 
 
 @pytest.mark.parametrize(
@@ -359,7 +356,7 @@ def test_environment_changes_the_gate_cannot_read_fail_closed() -> None:
 
 
 def test_deleting_an_environment_is_denied() -> None:
-    assert_denied(gate(f"gh api -X DELETE {REPO}/environments/demo"), "deleting an environment")
+    assert_denied(gate(f"gh api -X DELETE {REPO}/environments/demo"), "environment")
 
 
 def test_reading_an_environment_passes() -> None:
@@ -384,6 +381,241 @@ def test_bad_payloads_fail_closed_with_exit_2(raw: str) -> None:
 def test_a_missing_command_fails_closed() -> None:
     result = run_hook("cloud_gate.py", {"tool_name": "Bash", "tool_input": {}})
     assert_denied(result, "no command")
+
+
+# --- spellings the first verifier run found passing ---------------------------------------
+
+
+@pytest.mark.parametrize("tool", ["Bash", "PowerShell"])
+@pytest.mark.parametrize(
+    ("command", "word"),
+    [
+        ("azd --no-prompt up", "azd up"),
+        ("azd -C infra deploy", "azd deploy"),
+        ("azd --debug down --purge", "azd down"),
+        ("azd --cwd=infra --no-prompt deploy --all", "azd deploy"),
+        ("az --verbose group delete -n rg-answer-scorer-demo", "az group delete"),
+        ("az --only-show-errors account set -s other", "az account set"),
+    ],
+)
+def test_global_flags_before_a_blocked_subcommand_are_denied(
+    command: str, word: str, tool: str
+) -> None:
+    assert_denied(gate(command, tool), word)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "azd --no-prompt provision",
+        "azd -C infra env get-values",
+        "azd env set NOTE up",
+        "az --only-show-errors group show -n rg-answer-scorer-demo",
+    ],
+)
+def test_global_flags_before_an_ordinary_subcommand_pass(command: str) -> None:
+    assert_allowed(gate(command))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"gh api -XDELETE {REPO}/rulesets/42",
+        f"gh api -XDELETE {REPO}/environments/demo",
+        f"gh api -XDELETE {REPO}",
+        f"gh api -X=DELETE {REPO}/rulesets/42",
+        f"gh api --method=DELETE {REPO}/environments/demo",
+        f"gh api -X 'DELETE' {REPO}/rulesets/42",
+        f"gh api {REPO}/actions/runs/1/pending_deployments -fstate=approved",
+        f"gh api {REPO}/actions/runs/1/pending_deployments -Fstate=rejected",
+        f"gh api -XPOST {REPO}/actions/runs/1/pending_deployments --input body.json",
+    ],
+)
+def test_attached_short_flags_are_read(command: str) -> None:
+    assert_denied(gate(command), "blocked")
+
+
+@pytest.mark.parametrize(
+    ("changes", "word"),
+    [
+        ({"target": "tag"}, "target"),
+        ({"conditions": {"ref_name": {"include": ["refs/heads/other"], "exclude": []}}}, "default"),
+        ({"conditions": {"ref_name": {"include": [], "exclude": []}}}, "default"),
+        ({"conditions": {}}, "default"),
+        (
+            {"conditions": {"ref_name": {"include": ["~ALL"], "exclude": ["refs/heads/main"]}}},
+            "exclude",
+        ),
+    ],
+)
+def test_pointing_the_ruleset_away_from_main_is_denied(
+    tmp_path: Path, changes: dict, word: str
+) -> None:
+    path = _ruleset_file(tmp_path, **changes)
+    assert_denied(gate(f'gh api -X PUT {REPO}/rulesets/42 --input "{path}"'), word)
+
+
+# --- shapes the security review found passing ---------------------------------------------
+
+
+@pytest.mark.parametrize("tool", ["Bash", "PowerShell"])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "az --% group delete -n rg-answer-scorer-demo",
+        "azd --% up",
+        '& "az.cmd" group delete -n rg-answer-scorer-demo',
+        '& "azd.exe" deploy',
+    ],
+)
+def test_stop_parsing_tokens_and_quoted_tool_names_are_denied(command: str, tool: str) -> None:
+    assert_denied(gate(command, tool), "blocked")
+
+
+GOOD_ROLE = (
+    'az role assignment create --assignee abc --role "Cognitive Services OpenAI User" '
+    f"--scope {RG_SCOPE}/providers/Microsoft.CognitiveServices/accounts/example"
+)
+
+
+@pytest.mark.parametrize("separator", [" && ", "; ", " || ", "\n", " | "])
+def test_every_command_in_a_compound_line_is_checked(separator: str) -> None:
+    broad = f"az role assignment create --assignee b --role Contributor --scope {SUB_SCOPE}"
+    assert_denied(gate(GOOD_ROLE + separator + broad), "Owner, Contributor")
+    assert_denied(
+        gate(f"gh api -X GET {REPO}/rulesets{separator}gh api -X DELETE {REPO}/rulesets/42")
+    )
+    assert_denied(gate(f"echo ok{separator}azd up"), "azd up")
+
+
+def test_separators_inside_quotes_do_not_split_a_command() -> None:
+    assert_allowed(gate(f"gh api {REPO}/rulesets --jq '.[] | select(.name == \"main\") | .id'"))
+    assert_denied(gate(f"gh api -X DELETE --jq '.a | .b' {REPO}/rulesets/42"), "ruleset")
+
+
+@pytest.mark.parametrize(
+    ("command", "word"),
+    [
+        (
+            'az role assignment create --assignee abc --role "$ROLE" --scope ' + RG_SCOPE,
+            "role name",
+        ),
+        (
+            "SCOPE=$(az containerapp show -g rg-answer-scorer-demo -n app --query id -o tsv) && "
+            'az role assignment create --assignee abc --role "Reader" --scope "$SCOPE"',
+            "--scope out in full",
+        ),
+        (
+            'az role assignment create --assignee abc --role "Reader" '
+            "--scope /subscriptions/0000/resourceGroups/rg-answer-scorer-demo-other",
+            "rg-answer-scorer-demo",
+        ),
+    ],
+)
+def test_role_assignments_the_gate_cannot_read_fail_closed(command: str, word: str) -> None:
+    assert_denied(gate(command), word)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git checkout main && git merge --ff-only feature && git push",
+        "git switch main; git push origin HEAD",
+        "cd ../elsewhere && git push",
+        "git -C ../elsewhere push",
+    ],
+)
+def test_bare_pushes_after_a_move_are_denied(command: str, repo_on_branch: Path) -> None:
+    assert_denied(gate(command, cwd=str(repo_on_branch)), "name the branch")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "OUT=$(git push origin main)",
+        "echo `git push origin main`",
+        'git push origin "main"',
+    ],
+)
+def test_wrapped_pushes_to_main_are_denied(command: str, repo_on_branch: Path) -> None:
+    assert_denied(gate(command, cwd=str(repo_on_branch)), "pushes to main")
+
+
+def test_a_named_push_after_a_move_passes(repo_on_branch: Path) -> None:
+    result = gate("cd . && git push -u origin feature", cwd=str(repo_on_branch))
+    assert_allowed(result)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"gh api -X DELETE {REPO}/rulesets/$ID",
+        f"gh api -X PUT {REPO}/rulesets/$ID --input anything.json",
+        f"gh api -X DELETE {REPO}/environments/$NAME",
+        "gh api -X DELETE repos/{owner}/{repo}",
+        "gh api -X PATCH repos/{owner}/{repo} -f visibility=private",
+        "gh api -X PATCH repos/:owner/:repo -f private=true",
+    ],
+)
+def test_variables_and_placeholders_in_paths_are_denied(command: str, tmp_path: Path) -> None:
+    assert_denied(gate(command, cwd=str(tmp_path)))
+
+
+def test_a_ruleset_change_must_be_the_only_command(tmp_path: Path) -> None:
+    path = _ruleset_file(tmp_path)
+    command = f'echo rewrite && gh api -X PUT {REPO}/rulesets/42 --input "{path}"'
+    assert_denied(gate(command), "only command")
+
+
+def test_an_environment_change_must_be_the_only_command(tmp_path: Path) -> None:
+    body = tmp_path / "environment.json"
+    body.write_text(json.dumps({"reviewers": [{"type": "User", "id": 1}]}), encoding="utf-8")
+    command = f'echo rewrite; gh api -X PUT {REPO}/environments/demo --input "{body}"'
+    assert_denied(gate(command), "only command")
+
+
+@pytest.mark.parametrize("key", ["private", "visibility", "archived"])
+def test_repo_changes_sent_as_a_file_are_read(tmp_path: Path, key: str) -> None:
+    body = tmp_path / "repo.json"
+    body.write_text(json.dumps({key: True}), encoding="utf-8")
+    assert_denied(gate(f'gh api -X PATCH {REPO} --input "{body}"'), "visibility")
+
+
+def test_harmless_repo_changes_sent_as_a_file_pass(tmp_path: Path) -> None:
+    body = tmp_path / "repo.json"
+    body.write_text(json.dumps({"delete_branch_on_merge": True}), encoding="utf-8")
+    assert_allowed(gate(f'gh api -X PATCH {REPO} --input "{body}"'))
+
+
+def test_dropping_evals_is_denied_once_the_eval_gate_exists(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    (project / ".github" / "workflows").mkdir(parents=True)
+    (project / ".github" / "workflows" / "evals.yml").write_text("name: evals\n", encoding="utf-8")
+    only_ci = json.loads(json.dumps(GOOD_RULESET["rules"]))
+    only_ci[-1]["parameters"]["required_status_checks"] = [{"context": "ci"}]
+    path = _ruleset_file(tmp_path, rules=only_ci)
+    command = f'gh api -X PUT {REPO}/rulesets/42 --input "{path}"'
+    assert_denied(gate(command, env={"CLAUDE_PROJECT_DIR": str(project)}), "evals")
+    assert_allowed(gate(command, env={"CLAUDE_PROJECT_DIR": str(tmp_path)}))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["approveDeployments", "rejectDeployments", "deleteRepositoryRuleset", "deleteEnvironment"],
+)
+def test_blocked_graphql_mutations_are_denied(mutation: str) -> None:
+    command = (
+        f"gh api graphql -f query='mutation {{ {mutation}(input: {{}}) {{ clientMutationId }} }}'"
+    )
+    assert_denied(gate(command), mutation)
+
+
+def test_ordinary_graphql_queries_pass() -> None:
+    assert_allowed(gate("gh api graphql -f query='query { viewer { login } }'"))
+
+
+def test_non_ascii_text_in_a_command_is_read_as_utf8() -> None:
+    assert_allowed(gate("echo “curly quotes” and café"))
 
 
 def test_the_gate_never_exits_1() -> None:
