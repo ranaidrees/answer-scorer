@@ -82,6 +82,11 @@ help = "Start the app locally, score a strong, a weak and an injection answer, t
 cmd = "python scripts/smoke.py --local"
 envfile = ".env.local"
 
+[tool.poe.tasks.traffic]
+help = "Send demo traffic to the locally running app (start it with 'poe run' first). Add --profile normal or --profile injection-burst."
+cmd = "python scripts/traffic.py"
+envfile = ".env.local"
+
 [tool.poe.tasks.smoke-remote]
 help = "Smoke test against the live URL (--base-url, or CONTAINER_APP_FQDN from the environment)."
 cmd = "python scripts/smoke.py --remote"
