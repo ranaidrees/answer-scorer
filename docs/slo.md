@@ -25,7 +25,7 @@ The dashboard has two more views that carry no objective: tokens and estimated c
 
 **Model quality.** Each full eval run against the live model sends one `eval_run` event from CI with the trigger, every metric and the gate result. The tile lists the runs, newest first, with quadratic weighted kappa, exact and within-1 agreement and PASS or FAIL, and labels each run as pull request, nightly or manual. The alert is GitHub's own: a nightly run that fails the gate fails the workflow, and GitHub notifies the owner.
 
-**Tokens and cost.** `scorer.tokens_in` and `scorer.tokens_out` are the sums over the three model calls of one score. `scorer.cost_estimate_gbp` multiplies them by the published prices in `config/prices.yaml`, with every input token at the full input price. It is an estimate and is labelled as one wherever it appears. It is never the invoice.
+**Tokens and cost.** `scorer.tokens_in` and `scorer.tokens_out` are the sums over the three model calls of one score. `scorer.cost_estimate_gbp` multiplies them by the published prices in `config/prices.yaml`, with every input token at the full input price. It is an estimate and is labelled as one wherever it appears. It is never the invoice. The per-score figures are averaged over requests that were given a score. A request the platform guardrail blocked has no score, so it is counted in its own column, and its tokens and estimated cost appear in the totals only.
 
 ## The two review rates: a 15% gate and a 25% band
 

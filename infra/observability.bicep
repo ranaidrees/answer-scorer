@@ -106,8 +106,9 @@ requests
 | where status < 400 or status >= 500
 | summarize counted_requests = count(), failures_5xx = countif(status >= 500)
 | where counted_requests > 0
-| extend availability_pct = round(100.0 * (counted_requests - failures_5xx) / counted_requests, 2)
-| where availability_pct < 99.0
+| extend availability = 100.0 * (counted_requests - failures_5xx) / counted_requests
+| where availability < 99.0
+| project counted_requests, failures_5xx, availability_pct = round(availability, 2)
 '''
 
 resource latencyAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {

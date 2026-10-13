@@ -33,7 +33,7 @@ One resource group, `rg-answer-scorer-demo`, in UK South. The group and every re
 | Managed identities | `id-app`, `id-deploy`, `id-eval` | See below |
 | Budget | `budget-answer-scorer-demo` | On the resource group |
 
-There is no Azure Container Registry: the deploy workflow publishes a public image to `ghcr.io`. The workbook, the action group and the alert rules are not in `main.bicep`; they belong to `infra/observability.bicep`, which a later slice deploys on its own.
+There is no Azure Container Registry: the deploy workflow publishes a public image to `ghcr.io`. The workbook, the action group and the alert rules are not in `main.bicep`; they are in `infra/observability.bicep`, which is deployed on its own with `az deployment group create`, never with `azd`. The SLOs, the dashboard tiles and the alert rules are described in `docs/slo.md`.
 
 The Container App starts on a placeholder image (`mcr.microsoft.com/k8se/quickstart:latest`, port 80, no custom probes). The first deploy through GitHub Actions switches it to the real image on port 8000 and adds the probes.
 

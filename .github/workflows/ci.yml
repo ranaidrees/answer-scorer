@@ -40,7 +40,9 @@ jobs:
 
       # The Azure CLI is preinstalled on the runner. No sign-in: this only compiles.
       - name: Build the Bicep
-        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+        run: |
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          az bicep build --file infra/observability.bicep --stdout > /dev/null
 
       # Build only: nothing is pushed, so no registry sign-in is needed.
       - name: Build the container image (no push)

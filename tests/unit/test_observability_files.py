@@ -172,7 +172,32 @@ def test_an_alert_query_returns_no_row_when_there_is_no_data():
     assert latency.splitlines()[-1] == "| where completed_requests >= 5 and p95_ms > 6000"
     availability = queries["alert_availability"]["text"]
     assert "| where counted_requests > 0" in availability
-    assert availability.splitlines()[-1] == "| where availability_pct < 99.0"
+    assert "| where availability < 99.0" in availability
+
+
+def test_slo_comparisons_use_the_exact_figure_and_round_only_for_display():
+    queries = load_queries()
+    # 3 failures in 299 is 98.997%: rounded first, it would read 99.0 and pass unnoticed.
+    availability = queries["alert_availability"]["text"]
+    compared, shown = availability.split("| where availability < 99.0")
+    assert "round(" not in compared and "round(availability, 2)" in shown
+
+    tile1 = queries["tile1_requests_latency"]["text"]
+    assert "availability >= 99.0" in tile1 and "p95_ms <= 6000" in tile1
+    assert "availability_pct >= 99.0" not in tile1 and "p95_s <= 6.0" not in tile1
+
+    tile2 = queries["tile2_review_rate_by_reason"]["text"]
+    assert "rate <= 25.0" in tile2 and "rate_pct <= 25.0" not in tile2
+
+
+def test_cost_per_score_is_averaged_over_requests_that_have_a_score():
+    text = load_queries()["tile3_tokens_cost"]["text"]
+    assert 'has_score = isnotempty(tostring(customDimensions["scorer.score"]))' in text
+    assert "scores = countif(has_score)" in text
+    assert "blocked_no_score = countif(not(has_score))" in text
+    for column in ("tokens_in", "tokens_out", "cost_gbp"):
+        assert f"avgif({column}, has_score)" in text, column
+    assert "avg(" not in text.replace("avgif(", "")
 
 
 # --- infra/workbook.json -------------------------------------------------------------------

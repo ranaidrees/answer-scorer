@@ -1,6 +1,13 @@
-"""The smoke test script: its cases, its checks and what it prints. No network."""
+"""The smoke test script: its cases, its checks and what it prints.
+
+No network beyond this machine: the redirect test uses two servers on the loopback address.
+"""
 
 from __future__ import annotations
+
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
@@ -101,6 +108,65 @@ def test_remote_mode_needs_an_https_url_from_the_argument_or_the_environment(mon
     monkeypatch.setenv("CONTAINER_APP_FQDN", "app.example")
     assert smoke.remote_base_url(None) == "https://app.example"
     assert smoke.remote_base_url("https://other.example") == "https://other.example"
+
+
+class _Origin:
+    """A local HTTP server that records what it is sent and answers with one fixed reply."""
+
+    def __init__(self, status: int = 200, location: str | None = None) -> None:
+        self.requests: list[dict] = []
+        origin = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                origin.requests.append(
+                    {"method": self.command, "token": self.headers.get(smoke.DEMO_TOKEN_HEADER)}
+                )
+                raw = json.dumps({"status": "ok", "score": 5}).encode("utf-8")
+                self.send_response(status)
+                if location:
+                    self.send_header("Location", location)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            do_POST = do_GET
+
+            def log_message(self, *args) -> None:
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.thread = threading.Thread(
+            target=self.server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+        )
+        self.thread.start()
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_a_redirect_is_never_followed_so_the_token_stays_with_the_target(status):
+    elsewhere = _Origin()  # another origin, which answers 200 to anything it is sent
+    target = _Origin(status, location=f"{elsewhere.url}/api/score")
+    try:
+        scored = smoke.call(target.url, "/api/score", payload={"answer": "x"}, token=DEMO_TOKEN)
+        probed = smoke.call(target.url, "/healthz")
+    finally:
+        target.close()
+        elsewhere.close()
+
+    assert elsewhere.requests == [], "nothing, and so no token, reaches the other origin"
+    assert [request["token"] for request in target.requests] == [DEMO_TOKEN, None]
+    assert scored.status == status and probed.status == status
+    for check in smoke.SCORE_CHECKS.values():
+        assert check(scored) is False, "a redirect never counts as a passing case"
 
 
 def test_without_a_token_the_script_stops_with_a_non_zero_exit_code(monkeypatch, capsys):

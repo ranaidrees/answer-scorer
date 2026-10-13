@@ -29,7 +29,8 @@
 // A 4xx (wrong token, rate limit, input that cannot be scored) is the caller's side and
 // is left out of the failure rate and of availability. A failure is a 5xx. Latency is
 // measured on completed requests (status 200) only, because a refused request takes a
-// few milliseconds and would pull the percentiles down.
+// few milliseconds and would pull the percentiles down. Both SLO columns compare the
+// exact figures; the numbers shown beside them are rounded for display only.
 requests
 | where name == "POST /api/score"
 | extend status = toint(resultCode)
@@ -42,23 +43,19 @@ requests
     p50_ms = percentile(iff(status == 200, duration, real(null)), 50),
     p95_ms = percentile(iff(status == 200, duration, real(null)), 95)
 | where requests > 0
-| extend
-    failure_rate_pct = iff(counted_non_4xx == 0, real(null), round(100.0 * failures_5xx / counted_non_4xx, 2)),
-    p50_s = round(p50_ms / 1000.0, 2),
-    p95_s = round(p95_ms / 1000.0, 2)
-| extend availability_pct = 100.0 - failure_rate_pct
+| extend availability = iff(counted_non_4xx == 0, real(null), 100.0 * (counted_non_4xx - failures_5xx) / counted_non_4xx)
 | project
     requests,
     completed_200,
     client_errors_4xx,
     failures_5xx,
-    failure_rate_pct,
-    availability_pct,
-    availability_slo = case(isnull(availability_pct), "no data", availability_pct >= 99.0, "met (99% or more)", "missed (under 99%)"),
-    p50_s,
-    p95_s,
+    failure_rate_pct = round(100.0 - availability, 2),
+    availability_pct = round(availability, 2),
+    availability_slo = case(isnull(availability), "no data", availability >= 99.0, "met (99% or more)", "missed (under 99%)"),
+    p50_s = round(p50_ms / 1000.0, 2),
+    p95_s = round(p95_ms / 1000.0, 2),
     slo_p95_s = 6.0,
-    latency_slo = case(isnull(p95_s), "no data", p95_s <= 6.0, "met (6 s or less)", "missed (over 6 s)")
+    latency_slo = case(isnull(p95_ms), "no data", p95_ms <= 6000, "met (6 s or less)", "missed (over 6 s)")
 
 // name: tile1_latency_over_time
 // Tile 1, time chart. p50 and p95 latency of completed requests in 5-minute bins, with
@@ -120,13 +117,13 @@ let summary_rows = scored
 union reason_rows, summary_rows
 | where total > 0
 | extend scored_requests = total
-| extend rate_pct = round(100.0 * reviews / scored_requests, 1)
+| extend rate = 100.0 * reviews / scored_requests
 | extend band = case(
     row_order != 10, "",
-    rate_pct <= 25.0, "inside the 25% band",
+    rate <= 25.0, "inside the 25% band",
     "over the 25% band")
 | order by row_order asc
-| project measure, reviews, scored_requests, rate_pct, band
+| project measure, reviews, scored_requests, rate_pct = round(rate, 1), band
 
 // name: tile2_review_rate_over_time
 // Tile 2, time chart. The same rates in 5-minute bins, one series per reason, with the
@@ -158,21 +155,26 @@ union by_reason, control
 // One score is three model calls, and the token counts are the sum of the three. The cost
 // is an estimate: tokens multiplied by the prices in config/prices.yaml, with every input
 // token at the full input price. It is never the invoice.
-let scored = dependencies
+// A request that the platform guardrail blocked has no score (`scorer.score` is absent),
+// so it is counted on its own and left out of the per-score averages. Its tokens and its
+// estimated cost still count in the totals, because they were still spent.
+let recorded = dependencies
     | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
     | extend
         competency = tostring(customDimensions["scorer.competency"]),
+        has_score = isnotempty(tostring(customDimensions["scorer.score"])),
         tokens_in = tolong(customDimensions["scorer.tokens_in"]),
         tokens_out = tolong(customDimensions["scorer.tokens_out"]),
         cost_gbp = todouble(customDimensions["scorer.cost_estimate_gbp"]);
 union
-    (scored | extend row_order = 1),
-    (scored | extend row_order = 2, competency = "all")
+    (recorded | extend row_order = 1),
+    (recorded | extend row_order = 2, competency = "all")
 | summarize
-    scores = count(),
-    tokens_in_per_score = round(avg(tokens_in)),
-    tokens_out_per_score = round(avg(tokens_out)),
-    estimated_cost_per_score_gbp = round(avg(cost_gbp), 5),
+    scores = countif(has_score),
+    blocked_no_score = countif(not(has_score)),
+    tokens_in_per_score = round(avgif(tokens_in, has_score)),
+    tokens_out_per_score = round(avgif(tokens_out, has_score)),
+    estimated_cost_per_score_gbp = round(avgif(cost_gbp, has_score), 5),
     tokens_in_total = sum(tokens_in),
     tokens_out_total = sum(tokens_out),
     estimated_cost_total_gbp = round(sum(cost_gbp), 4)
@@ -222,11 +224,14 @@ requests
 // Alert "availability under 99%". The rule runs this over a 1-hour window and fires when
 // it returns a row. It returns a row only when fewer than 99% of the non-4xx requests in
 // the window succeeded. No requests means no row, so the rule cannot fire on no data.
+// The comparison uses the exact figure: 3 failures in 299 is 98.997% and must fire, so
+// the value is rounded only after the comparison, for display.
 requests
 | where name == "POST /api/score"
 | extend status = toint(resultCode)
 | where status < 400 or status >= 500
 | summarize counted_requests = count(), failures_5xx = countif(status >= 500)
 | where counted_requests > 0
-| extend availability_pct = round(100.0 * (counted_requests - failures_5xx) / counted_requests, 2)
-| where availability_pct < 99.0
+| extend availability = 100.0 * (counted_requests - failures_5xx) / counted_requests
+| where availability < 99.0
+| project counted_requests, failures_5xx, availability_pct = round(availability, 2)

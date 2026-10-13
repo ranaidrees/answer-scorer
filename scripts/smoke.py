@@ -58,6 +58,20 @@ class SmokeError(Exception):
     """The smoke test cannot run at all (bad arguments, missing token, app not up)."""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuses every redirect, so the demo token is never sent on to another address.
+
+    With no new request to follow, the 3xx reply is raised as an HTTP error, so the case
+    sees a 3xx status and does not hold.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def load_case(name: str) -> dict:
     """Read one case from the datasets. Only a `dev` row is ever sent."""
     file_name, row_id = CASES[name]
@@ -85,7 +99,10 @@ def call(
     token: str | None = None,
     timeout: float = PROBE_TIMEOUT_SECONDS,
 ) -> Reply:
-    """One HTTP call. A refused connection or a timeout is reported as status 0."""
+    """One HTTP call. A refused connection or a timeout is reported as status 0.
+
+    A redirect is never followed: the reply comes back with its own 3xx status.
+    """
     headers = {"Accept": "application/json"}
     data = None
     if payload is not None:
@@ -98,7 +115,7 @@ def call(
     )
     started = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with _OPENER.open(request, timeout=timeout) as response:
             status, raw = response.status, response.read()
     except urllib.error.HTTPError as error:
         status, raw = error.code, error.read()

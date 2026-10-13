@@ -32,13 +32,14 @@ def answers(split: str) -> set[str]:
 
 def scored_body(payload: dict) -> dict:
     """A reply shaped like the service's, with the answer echoed where the service has text."""
+    answer = payload.get("answer", "")
     return {
         "request_id": "stub",
-        "competency_id": payload["competency_id"],
+        "competency_id": payload.get("competency_id", "teamwork"),
         "score": 2,
         "level_label": "Developing",
-        "rationale": f"The answer says: {payload['answer']}",
-        "evidence": [{"quote": payload["answer"][:60], "grounded": True}],
+        "rationale": f"The answer says: {answer}",
+        "evidence": [{"quote": answer[:60], "grounded": True}],
         "runs": [2, 2, 3],
         "spread": 1,
         "needs_human_review": True,
@@ -61,11 +62,16 @@ class Stub:
         stub = self
 
         class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                # A client that follows a 301, 302 or 303 repeats a POST as a GET.
+                self.do_POST()
+
             def do_POST(self) -> None:
-                length = int(self.headers.get("Content-Length", "0"))
-                payload = json.loads(self.rfile.read(length))
+                length = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(length)) if length else {}
                 stub.requests.append(
                     {
+                        "method": self.command,
                         "path": self.path,
                         "token": self.headers.get("X-Demo-Token"),
                         "payload": payload,
@@ -86,7 +92,9 @@ class Stub:
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+        )
         self.thread.start()
 
     def close(self) -> None:
@@ -397,6 +405,45 @@ def test_three_failed_requests_in_a_row_stop_the_run(stub, fake_time, monkeypatc
     printed = capsys.readouterr().out
     assert "TRAFFIC: STOPPED repeated_failures" in printed
     assert "sent=4 of 8 statuses=200:1,500:1,503:2" in printed
+
+
+@pytest.mark.parametrize("status", [400, 403, 404, 422])
+def test_a_4xx_on_every_request_stops_the_run_like_any_other_failure(
+    stub, fake_time, monkeypatch, capsys, status
+):
+    stub.statuses(*[status] * 10)
+
+    assert run_main(stub, fake_time, monkeypatch, "--count", "10") == 1
+
+    assert len(stub.requests) == traffic.MAX_FAILURES_IN_A_ROW
+    printed = capsys.readouterr().out
+    assert "TRAFFIC: STOPPED repeated_failures" in printed
+    assert f"sent=3 of 10 statuses={status}:3" in printed
+
+
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_a_redirect_is_never_followed_so_the_token_stays_with_the_target(
+    stub, fake_time, monkeypatch, capsys, status
+):
+    elsewhere = Stub()  # another origin, which answers 200 to anything it is sent
+    try:
+        stub.respond = lambda number, payload: (
+            status,
+            {},
+            {"Location": f"{elsewhere.url}/api/score"},
+        )
+
+        assert run_main(stub, fake_time, monkeypatch, "--count", "5") == 1
+
+        assert elsewhere.requests == [], "nothing, and so no token, reaches the other origin"
+    finally:
+        elsewhere.close()
+    assert len(stub.requests) == traffic.MAX_FAILURES_IN_A_ROW
+    printed = capsys.readouterr().out
+    assert printed.count(f"status={status} error=-") == 3
+    assert "status=200" not in printed, "the other origin's 200 is never counted as a score"
+    assert "TRAFFIC: STOPPED repeated_failures" in printed
+    assert f"statuses={status}:3" in printed
 
 
 def test_failures_that_are_not_in_a_row_do_not_stop_the_run_but_fail_it(

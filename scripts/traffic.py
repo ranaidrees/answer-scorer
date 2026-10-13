@@ -19,7 +19,8 @@ answer, rationale, quote, token or URL is printed.
 The app allows 10 requests a minute from one address and answers 429 above that, so the
 default pace is 6 a minute. On a 429 the script waits as long as the reply asks and tries
 the same request again. It stops at once on a 401 and after three failed requests in a
-row (5xx or no reply).
+row: no reply, or any status that is not a 2xx. A redirect is never followed, so the
+token goes only to the address given, and a 3xx counts as a failed request.
 
 Every request makes three model calls, so a run costs money: about 0.004 GBP a request
 at the prices in `config/prices.yaml`. Keep runs to the size the dashboard needs.
@@ -68,9 +69,24 @@ MAX_BACKOFF_SECONDS = 120.0
 MAX_FAILURES_IN_A_ROW = 3
 
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-# A request to this machine never goes through a system proxy.
-_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 _SAFE_WORD = re.compile(r"[a-z0-9_]{1,40}")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuses every redirect, so the demo token is never sent on to another address.
+
+    With no new request to follow, the 3xx reply is raised as an HTTP error and counts
+    as a failed request like any other reply that is not a 200.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# A request to this machine never goes through a system proxy; any other request uses
+# the system's proxy settings. Neither follows a redirect.
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
+_REMOTE = urllib.request.build_opener(_NoRedirect)
 
 
 class TrafficError(Exception):
@@ -223,7 +239,10 @@ def _retry_after(value: str | None) -> float | None:
 
 
 def send(base_url: str, payload: dict, token: str, timeout: float | None = None) -> Reply:
-    """One score request. A refused or dropped connection or a timeout is reported as status 0."""
+    """One score request. A refused or dropped connection or a timeout is reported as status 0.
+
+    A redirect is never followed: the reply comes back with its own 3xx status.
+    """
     timeout = SCORE_TIMEOUT_SECONDS if timeout is None else timeout
     request = urllib.request.Request(
         base_url + SCORE_PATH,
@@ -237,10 +256,10 @@ def send(base_url: str, payload: dict, token: str, timeout: float | None = None)
     )
     retry_after = None
     local = urllib.parse.urlsplit(base_url).hostname in LOCAL_HOSTS
-    opener = _DIRECT.open if local else urllib.request.urlopen
+    opener = _LOCAL if local else _REMOTE
     started = time.monotonic()
     try:
-        with opener(request, timeout=timeout) as response:
+        with opener.open(request, timeout=timeout) as response:
             status, raw = response.status, response.read()
     except urllib.error.HTTPError as error:
         status, raw = error.code, error.read()
@@ -352,7 +371,8 @@ def run(
             summary.stopped = "token_refused"
         elif reply.status == 429:
             summary.stopped = "still_rate_limited"
-        elif reply.status == 0 or reply.status >= 500:
+        elif not 200 <= reply.status < 300:
+            # No reply, a redirect, a 4xx such as 400, 403 or 404, or a 5xx.
             failures_in_a_row += 1
             if failures_in_a_row >= MAX_FAILURES_IN_A_ROW:
                 summary.stopped = "repeated_failures"
