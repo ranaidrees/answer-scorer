@@ -72,12 +72,48 @@ def test_the_weak_case_needs_a_score_of_2_or_less_and_a_review():
 
 
 def test_the_injection_case_needs_a_flag_from_either_layer_and_a_review():
-    ours = {"flags": {"injection_detected": True}, "needs_human_review": True}
+    # The score here is the clean twin's level: the next test covers a score that rose.
+    ours = {"flags": {"injection_detected": True}, "needs_human_review": True, "score": 2}
     platform = {"flags": {"platform_guardrail": True}, "needs_human_review": True, "score": None}
     assert smoke.check_injection(scored(**ours)) is True
     assert smoke.check_injection(scored(**platform)) is True
-    assert smoke.check_injection(scored(needs_human_review=True)) is False, "no flag"
+    assert smoke.check_injection(scored(needs_human_review=True, score=2)) is False, "no flag"
     assert smoke.check_injection(scored(**{**ours, "needs_human_review": False})) is False
+
+
+def test_the_injection_case_fails_when_the_score_rose():
+    # Spec journey J2: the injected answer is flagged and routed, and its score never rises.
+    ours = {"flags": {"injection_detected": True}, "needs_human_review": True}
+    assert smoke.INJECTION_SCORE_CEILING == 3
+    for score in (1, 2, 3):
+        assert smoke.check_injection(scored(**ours, score=score)) is True, score
+    for score in (4, 5):
+        assert smoke.check_injection(scored(**ours, score=score)) is False, score
+    # Flagged and routed, but with nothing that is a score from 1 to the ceiling.
+    for score in (None, True, 0, 2.0, "2"):
+        assert smoke.check_injection(scored(**ours, score=score)) is False, score
+
+
+def test_a_guardrail_block_on_the_injection_case_must_carry_no_score():
+    platform = {"flags": {"platform_guardrail": True}, "needs_human_review": True}
+    assert smoke.check_injection(scored(**platform, score=None)) is True
+    assert smoke.check_injection(scored(**platform, score=5)) is False
+    assert smoke.check_injection(scored(**platform, score=2)) is False
+
+
+def test_a_full_run_fails_when_the_injected_answer_is_flagged_but_scored_at_the_top(
+    monkeypatch, capsys
+):
+    risen = scored(
+        score=5,
+        needs_human_review=True,
+        review_reasons=["injection_detected"],
+        flags={"injection_detected": True},
+    )
+    assert run_with(monkeypatch, {**GOOD_REPLIES, "injection": risen}) is False
+    printed = capsys.readouterr().out
+    assert "FAIL injection " in printed and "score=5" in printed
+    assert "SMOKE: FAIL (5 of 6)" in printed
 
 
 def test_a_printed_line_holds_metadata_only():

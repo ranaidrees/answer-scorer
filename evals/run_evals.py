@@ -10,8 +10,9 @@ gate, and writes a Markdown and a JSON report.
     uv run poe eval --fake-weak             the same with a fake that should breach the gate
     uv run poe eval --suite golden --split dev    a partial run, while tuning
 
-Only a full run (every suite, every split) can pass the gate. A partial run says that it
-is partial and never prints "GATE: PASS".
+Only a full run (every suite, every split) can pass the gate, and only when it holds
+every dataset in full. A partial run says that it is partial and never prints
+"GATE: PASS". A run with a fake model says in its last line that it is a dry run.
 
 If the model is unavailable the run stops: it says which input failed, writes no report,
 exits with code 2 and never invents a score. The dataset files are data. Their text is
@@ -39,10 +40,16 @@ from pathlib import Path
 
 import yaml
 
-from evals.metrics import Evaluation, evaluate, validate_thresholds
+from evals.metrics import REQUIRED_SIZES, Evaluation, evaluate, validate_thresholds
 from evals.report import DECISION_INFORMED, console_lines, gate_line, render_markdown
 from scorer.config import Settings, load_prompt
-from scorer.model_client import ModelClient, ModelResult, ModelUnavailableError
+from scorer.model_client import (
+    MAX_COMPLETION_TOKENS,
+    REASONING_EFFORT,
+    ModelClient,
+    ModelResult,
+    ModelUnavailableError,
+)
 from scorer.pipeline import ANSWER_CLOSE, ANSWER_OPEN, RUNS, ScoringError, score_answer
 from scorer.schemas import ScoreRequest
 
@@ -71,11 +78,13 @@ DEFAULT_CONCURRENCY = 4
 # full run clear of throttling (decision S4b-6). The fake clients are not paced.
 DEFAULT_PER_MINUTE = 12.0
 
-# Fixed by the live client and the spec (FR-4 step 6). Printed in every report.
+# Fixed by the spec (FR-4 step 6) and printed in every report. The values are the live
+# client's and the pipeline's own constants, so a report cannot say one thing while the
+# client sends another. The live client passes no `temperature` and no `top_p`.
 FIXED_INFERENCE = {
     "runs_per_answer": RUNS,
-    "reasoning_effort": "none",
-    "max_completion_tokens": 600,
+    "reasoning_effort": REASONING_EFFORT,
+    "max_completion_tokens": MAX_COMPLETION_TOKENS,
     "temperature": "not set (the model family does not accept them)",
 }
 
@@ -548,6 +557,9 @@ def build_report(
             **FIXED_INFERENCE,
         },
         "gate": {"status": status, "breached": evaluation.breached},
+        # Reasons the gate failed that are not a metric: a run short of a required size,
+        # or a control that tripped without routing the answer.
+        "gate_failures": [failure.as_dict() for failure in evaluation.failures],
         "metrics": [metric.as_dict() for metric in evaluation.metrics],
         "thresholds": {key: dict(value) for key, value in thresholds.items()},
         "misses": [miss.as_dict() for miss in evaluation.misses],
@@ -610,6 +622,7 @@ def eval_event_attributes(report: Mapping) -> dict:
         "gate": gate["status"],
         "passed": gate["status"] == "pass",
         "breached": ",".join(gate["breached"]),
+        "failures": ",".join(sorted({item["rule"] for item in report["gate_failures"]})),
         "seed": run["seed"],
         "model_deployment": inference["model_deployment"],
         "model_version": inference["model_version"],
@@ -636,13 +649,16 @@ def emit_eval_event(report: Mapping, settings: Settings) -> str:
     if report["run"]["client"] != LIVE or report["run"]["mode"] != "full":
         return "not sent (only a full run against the live model is recorded)"
     try:
-        from scorer.telemetry import configure_telemetry, emit_custom_event
+        from scorer.telemetry import configure_telemetry, emit_custom_event, flush_telemetry
     except ImportError:
         return "not sent (the telemetry module is not in this checkout)"
     try:
         if not configure_telemetry(settings):
             return "not sent (telemetry is not configured)"
         emit_custom_event("eval_run", eval_event_attributes(report))
+        # The process ends straight after this, so the event is sent now and not left to
+        # the exporter's exit hook.
+        flush_telemetry()
     except Exception as error:
         return f"not sent ({type(error).__name__})"
     return "sent"
@@ -779,7 +795,10 @@ def main(argv: Sequence[str] | None = None, *, client_factory: ClientFactory | N
         results = asyncio.run(_score_all(args, items, settings, client_name, client_factory))
         report = build_report(
             results=results,
-            evaluation=evaluate(results, thresholds),
+            # Only a full run is a gate result, so only a full run must hold every size.
+            evaluation=evaluate(
+                results, thresholds, required_sizes=REQUIRED_SIZES if full else None
+            ),
             thresholds=thresholds,
             settings=settings,
             suites=args.suite,
@@ -821,7 +840,7 @@ def main(argv: Sequence[str] | None = None, *, client_factory: ClientFactory | N
         return EXIT_FAIL
     # A partial run is not a gate result. It still exits non-zero when a metric it did
     # compute is on the wrong side of its threshold, so tuning runs can be scripted.
-    return EXIT_FAIL if report["gate"]["breached"] else EXIT_PASS
+    return EXIT_FAIL if report["gate"]["breached"] or report["gate_failures"] else EXIT_PASS
 
 
 if __name__ == "__main__":

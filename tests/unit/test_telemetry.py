@@ -173,8 +173,99 @@ def test_emit_custom_event_sends_one_record_marked_as_an_application_insights_ev
     assert getattr(record, "microsoft.custom_event.name") == "eval_run"
     assert record.git_sha == "abc1234" and record.qwk == 0.81
     assert record.passed is True and record.n == 30
-    assert record.by == '["a"]', "a value that is not a scalar is sent as JSON text"
+    assert not hasattr(record, "by"), "a value that is not a scalar is dropped, never sent as text"
     assert not hasattr(record, "skipped"), "a None value is left out"
+
+
+SENTENCE = "I asked each of them to explain their concern before I suggested anything"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        True,
+        False,
+        0,
+        30,
+        0.8125,
+        -1.5,
+        "",
+        "pass",
+        "v1",
+        "2026-03-17",
+        "scorer-mini",
+        "pull_request",
+        "a" * 40,
+        "f" * 64,
+        "golden_exact,injection_mean_diff,ungrounded_quote_rate",
+    ],
+)
+def test_numbers_booleans_and_token_text_pass_the_event_allow_list(value):
+    assert telemetry.is_safe_event_value(value) is True
+    assert telemetry.safe_event_attributes({"metric_name": value}) == {"metric_name": value}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        SENTENCE,
+        "two words",
+        "line\nbreak",
+        "someone@example.invalid",
+        "https://example.invalid/path",
+        "InstrumentationKey=abc;IngestionEndpoint=x",
+        "a" * 65,
+        ",".join(["metric_name"] * 40),  # token text, but longer than any list of metrics
+        "trailing,",
+        ["a"],
+        {"a": 1},
+        ("a",),
+        b"bytes",
+        float("nan"),
+        float("inf"),
+        object(),
+    ],
+)
+def test_anything_else_is_dropped_by_the_event_allow_list(value):
+    assert telemetry.is_safe_event_value(value) is False
+    assert telemetry.safe_event_attributes({"metric_name": value}) == {}
+
+
+@pytest.mark.parametrize("key", ["Has Space", "UPPER", "dotted.name", "9lives", "", "x" * 65, 7])
+def test_an_attribute_name_that_is_not_a_plain_identifier_is_dropped(key):
+    assert telemetry.safe_event_attributes({key: 1}) == {}
+
+
+def test_an_event_with_a_name_that_is_not_on_the_allow_list_is_not_sent(azure_monitor, caplog):
+    configure_telemetry(make_settings(applicationinsights_connection_string=CONNECTION))
+    caplog.set_level(logging.INFO, logger="scorer")
+
+    emit_custom_event("answer_received", {"n": 1})
+    emit_custom_event(SENTENCE, {"n": 1})
+
+    assert [item for item in caplog.records if item.name == "scorer.events"] == []
+    assert telemetry.CUSTOM_EVENT_NAMES == {"eval_run"}
+    assert SENTENCE not in "\n".join(item.getMessage() for item in caplog.records)
+
+
+def test_candidate_text_in_an_event_attribute_never_leaves_the_process(azure_monitor, caplog):
+    configure_telemetry(make_settings(applicationinsights_connection_string=CONNECTION))
+    caplog.set_level(logging.INFO, logger="scorer")
+
+    emit_custom_event(
+        "eval_run",
+        {"gate": "pass", "rationale": SENTENCE, "quotes": [SENTENCE], SENTENCE: 1, "n": 30},
+    )
+
+    (record,) = [item for item in caplog.records if item.name == "scorer.events"]
+    assert (record.gate, record.n) == ("pass", 30)
+    assert not hasattr(record, "rationale") and not hasattr(record, "quotes")
+    for item in caplog.records:
+        assert SENTENCE not in item.getMessage()
+        assert SENTENCE not in " ".join(str(value) for value in vars(item).values())
+    # What was dropped is counted, not shown.
+    (warning,) = [item for item in caplog.records if item.name == "scorer.telemetry"]
+    assert "3 attributes dropped" in warning.getMessage()
 
 
 def test_an_event_attribute_named_like_a_log_record_field_is_renamed_not_refused(

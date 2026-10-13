@@ -8,20 +8,25 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
+import sys
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
+from starlette.requests import Request
 from starlette.testclient import TestClient
 
-from scorer.api import MAX_BODY_BYTES, RateLimiter, create_app, token_matches
+from scorer.api import MAX_BODY_BYTES, RateLimiter, client_address, create_app, token_matches
 from scorer.model_client import FakeModelClient, ModelUnavailableError
 from scorer.schemas import NOTICE
 from tests.unit.samples import (
     EXACT_QUOTE,
     QUESTION,
+    REPO_ROOT,
     TEAMWORK_ANSWER,
     good_client,
     make_settings,
@@ -190,16 +195,66 @@ def test_fr1_the_eleventh_request_in_a_minute_from_one_address_is_429():
     assert len(model.calls) == 30, "the refused request made no model call"
 
 
-def test_fr1_the_rate_limit_is_per_address_from_the_first_forwarded_hop():
+def test_fr1_the_rate_limit_is_per_address_from_the_last_forwarded_hop():
+    # The ingress appends the address it saw as the last value. Everything before it is
+    # whatever the caller sent, so it is not part of the key.
     client = make_client()
-    first = {**AUTH, "X-Forwarded-For": "203.0.113.7, 10.0.0.1"}
-    same = {**AUTH, "X-Forwarded-For": "203.0.113.7, 10.9.9.9"}
-    other = {**AUTH, "X-Forwarded-For": "203.0.113.8, 10.0.0.1"}
+    first = {**AUTH, "X-Forwarded-For": "10.0.0.1, 203.0.113.7"}
+    same = {**AUTH, "X-Forwarded-For": "10.9.9.9, 203.0.113.7"}
+    other = {**AUTH, "X-Forwarded-For": "10.0.0.1, 203.0.113.8"}
 
     for _ in range(10):
         assert client.post("/api/score", json=body(), headers=first).status_code == 200
     assert client.post("/api/score", json=body(), headers=same).status_code == 429
     assert client.post("/api/score", json=body(), headers=other).status_code == 200
+
+
+def test_fr1_a_spoofed_first_hop_does_not_change_the_rate_limit_key():
+    model = good_client()
+    client = make_client(model)
+    statuses = [
+        client.post(
+            "/api/score",
+            json=body(),
+            headers={**AUTH, "X-Forwarded-For": f"198.51.100.{number}, 203.0.113.7"},
+        ).status_code
+        for number in range(40)
+    ]
+    assert statuses == [200] * 10 + [429] * 30
+    assert len(model.calls) == 30, "only the first ten requests reached the model"
+
+
+def test_fr1_a_caller_cannot_spend_another_address_by_naming_it_in_the_header():
+    client = make_client()
+    victim = "203.0.113.50"
+    # The attacker, seen by the ingress at 203.0.113.99, names the victim's address.
+    attack = {"X-Forwarded-For": f"{victim}, 203.0.113.99"}
+    for _ in range(10):
+        assert client.post("/api/score", json=body(), headers=attack).status_code == 401
+    assert client.post("/api/score", json=body(), headers=attack).status_code == 429
+
+    # The victim's own request, with the address the ingress appended, is not limited.
+    own = {**AUTH, "X-Forwarded-For": victim}
+    assert client.post("/api/score", json=body(), headers=own).status_code == 200
+
+
+def test_the_rate_limit_key_is_the_last_hop_or_else_the_socket_address():
+    def address(headers: list[tuple[bytes, bytes]], peer=("192.0.2.9", 5000)) -> str:
+        scope = {"type": "http", "headers": headers, "client": peer}
+        return client_address(Request(scope))
+
+    forwarded = b"x-forwarded-for"
+    assert address([]) == "192.0.2.9"
+    assert address([(forwarded, b"203.0.113.7")]) == "203.0.113.7"
+    assert address([(forwarded, b"1.1.1.1, 2.2.2.2 , 203.0.113.7 ")]) == "203.0.113.7"
+    # A second header line sent by the caller cannot hide the one the ingress wrote last.
+    assert address([(forwarded, b"1.1.1.1"), (forwarded, b"2.2.2.2, 203.0.113.7")]) == (
+        "203.0.113.7"
+    )
+    # An empty last value is not an address: fall back to the socket.
+    assert address([(forwarded, b"1.1.1.1, ")]) == "192.0.2.9"
+    assert address([(forwarded, b"")], peer=None) == "unknown"
+    assert len(address([(forwarded, b"1.1.1.1, " + b"9" * 500)])) == 64
 
 
 def test_fr1_requests_without_a_token_count_towards_the_limit():
@@ -230,6 +285,36 @@ def test_the_rate_limiter_does_not_grow_without_limit():
     now[0] += 61.0
     assert limiter.allow("d")
     assert len(limiter._hits) == 1, "idle keys were dropped"
+
+
+def test_a_full_table_does_not_reset_a_key_that_is_being_limited():
+    now = [0.0]
+    limiter = RateLimiter(limit=2, window_seconds=60.0, clock=lambda: now[0], max_keys=3)
+    assert limiter.allow("limited") and limiter.allow("limited")
+    assert not limiter.allow("limited")
+
+    # A flood of new keys, all inside the window, fills the table many times over.
+    for number in range(50):
+        now[0] += 0.1
+        assert limiter.allow(f"flood-{number}")
+        assert len(limiter._hits) <= 3, "the table never grows past its bound"
+        assert not limiter.allow("limited"), "the flood did not clear the counter"
+
+    now[0] += 61.0
+    assert limiter.allow("limited"), "the limit lifts only when the window has passed"
+
+
+def test_a_full_table_drops_the_quietest_keys_in_batches_and_stays_bounded():
+    now = [0.0]
+    limiter = RateLimiter(limit=3, window_seconds=60.0, clock=lambda: now[0], max_keys=20)
+    for key in ("busy-a", "busy-b"):
+        assert all(limiter.allow(key) for _ in range(3))
+    for number in range(200):
+        now[0] += 0.01
+        limiter.allow(f"once-{number}")
+        assert len(limiter._hits) <= 20
+    assert not limiter.allow("busy-a") and not limiter.allow("busy-b")
+    assert all(len(hits) <= 3 for hits in limiter._hits.values())
 
 
 def test_health_and_the_page_are_not_rate_limited():
@@ -357,6 +442,16 @@ def test_fr1_a_malformed_body_or_an_unknown_field_is_a_generic_400_with_no_echo(
 
     assert_error(response, 400, "invalid_request")
     assert response.json()["error"]["message"] == "The request body is not valid."
+    assert MARKER not in response.text
+    assert model.calls == []
+
+
+def test_fr1_a_question_over_the_limit_is_400_and_the_model_is_not_called():
+    model = good_client()
+    question = (MARKER + " ") * 2000  # about 50,000 characters, inside the body limit
+    response = make_client(model).post("/api/score", json=body(question=question), headers=AUTH)
+
+    assert_error(response, 400, "question_too_long")
     assert MARKER not in response.text
     assert model.calls == []
 
@@ -554,3 +649,57 @@ def test_the_api_has_no_generated_docs_routes():
     client = make_client()
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404
+
+
+# --- Importing the module ---------------------------------------------------------------
+
+# Run in a child process, so that the import is a first import. The telemetry set-up is
+# replaced by a recorder before `scorer.api` is loaded, so nothing can reach an exporter
+# even if the behaviour under test is ever lost.
+IMPORT_PROBE = """
+import scorer.telemetry as telemetry
+
+calls = []
+telemetry.configure_telemetry = lambda settings: calls.append("configure") or False
+
+import scorer.api as api
+
+assert calls == [], "importing scorer.api configured telemetry"
+assert "app" not in vars(api), "importing scorer.api built the app"
+assert telemetry.telemetry_configured() is False
+
+app = api.app  # what the server does when it starts
+assert calls == ["configure"], "asking for the app did not configure telemetry"
+assert api.app is app, "the app is built once"
+assert app.state.settings.demo_token == "probe-token"
+print("import-probe-ok")
+"""
+
+
+def test_importing_the_api_module_builds_and_configures_nothing():
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(REPO_ROOT / "src"),
+        "SCORER_ROOT": str(REPO_ROOT),
+        # A shell that holds a connection string, as a developer's might.
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": "synthetic-connection-value",
+        "DEMO_TOKEN": "probe-token",
+        "FOUNDRY_ENDPOINT": "",
+    }
+    done = subprocess.run(
+        [sys.executable, "-c", IMPORT_PROBE],
+        capture_output=True,
+        text=True,
+        env=environment,
+        cwd=REPO_ROOT,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert "import-probe-ok" in done.stdout
+
+
+def test_the_module_has_no_other_lazy_attribute():
+    import scorer.api as api
+
+    with pytest.raises(AttributeError):
+        _ = api.application

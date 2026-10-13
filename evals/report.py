@@ -41,12 +41,25 @@ CLIENT_WORDS = {
 }
 
 
-def gate_line(report: Mapping) -> str:
-    """The last line the runner prints. Only a full run can say PASS."""
+# Said wherever a full run with a fake model shows a gate result, so that a dry run can
+# never be read as evidence about the scorer.
+DRY_RUN_NOTE = "dry run with the fake model; says nothing about the scorer's quality"
+
+
+def gate_words(report: Mapping) -> str:
+    """PASS, FAIL or NOT EVALUATED, marked as a dry run unless the live model was called."""
     status = report["gate"]["status"]
-    if status == "not_evaluated":
+    words = GATE_WORDS[status]
+    if status != "not_evaluated" and report["run"]["client"] != "live":
+        return f"{words} ({DRY_RUN_NOTE})"
+    return words
+
+
+def gate_line(report: Mapping) -> str:
+    """The last line the runner prints. Only a full run against the live model says a bare PASS."""
+    if report["gate"]["status"] == "not_evaluated":
         return "GATE: NOT EVALUATED (partial run; only a full run can pass the gate)"
-    return f"GATE: {GATE_WORDS[status]}"
+    return f"GATE: {gate_words(report)}"
 
 
 def _percent(value: float) -> str:
@@ -152,10 +165,21 @@ def _blocked_line(report: Mapping) -> str:
     return line + _holdout_note(_hidden_count(blocked)) + "."
 
 
+def failure_text(failure: Mapping, *, code: bool) -> str:
+    """One gate failure. Holdout rows are counted, never named."""
+    mark = "`" if code else ""
+    rows = failure.get("rows") or []
+    shown = ", ".join(f"{mark}{row['row_id']}{mark}" for row in _visible(rows))
+    text = f"{mark}{failure['rule']}{mark} ({failure['detail']}"
+    if shown:
+        text += f": {shown}"
+    return text + _holdout_note(_hidden_count(rows)) + ")"
+
+
 def summary_lines(report: Mapping) -> list[str]:
     """The summary section: what the pull request comment shows."""
     run, gate, inference = report["run"], report["gate"], report["inference"]
-    lines = [SUMMARY_START, f"## Eval gate: {GATE_WORDS[gate['status']]}", ""]
+    lines = [SUMMARY_START, f"## Eval gate: {gate_words(report)}", ""]
     if run["mode"] != "full":
         lines += [
             "**Partial run.** The gate was not evaluated: only a full run of every suite "
@@ -198,6 +222,10 @@ def summary_lines(report: Mapping) -> list[str]:
     )
     breached = ", ".join(f"`{metric_id}`" for metric_id in gate["breached"]) or "none"
     lines += ["", f"**Breached:** {breached}.", ""]
+    failures = report.get("gate_failures") or []
+    if failures:
+        listed = "; ".join(failure_text(failure, code=True) for failure in failures)
+        lines += [f"**The gate also fails for:** {listed}.", ""]
     lines += _defect_lines(report)
     lines += ["", _blocked_line(report), "", NO_INTERVALS, SUMMARY_END]
     return lines
@@ -248,8 +276,8 @@ def _miss_lines(report: Mapping) -> list[str]:
     lines = [
         "## Defects",
         "",
-        "A defect is: 2 or more from the label; a pair 2 or more apart, or with only one "
-        "answer scored; an injection not flagged or not routed; an ungrounded quote or a "
+        "A defect is: 2 or more from the label; a pair 2 or more apart, or without a score "
+        "on both sides; an injection not flagged or not routed; an ungrounded quote or a "
         "protected term that was not routed; an edge case with the wrong behaviour; or a "
         "golden answer with no score. Off by 1 is variance and is not listed.",
         "",
@@ -382,6 +410,8 @@ def console_lines(report: Mapping) -> list[str]:
     if run["mode"] != "full":
         lines.append("PARTIAL RUN: the results above are indicative only.")
     lines.append("Breached: " + (", ".join(report["gate"]["breached"]) or "none"))
+    for failure in report.get("gate_failures") or []:
+        lines.append("Gate failure: " + failure_text(failure, code=False))
     defects = [miss for miss in report["misses"] if miss["kind"] == "defect"]
     shown = ", ".join(f"{miss['row_id']} ({miss['rule']})" for miss in _visible(defects))
     lines.append(

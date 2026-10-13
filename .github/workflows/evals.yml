@@ -52,13 +52,15 @@ jobs:
           ACTOR: ${{ github.actor }}
         run: python3 evals/changed_paths.py
 
+      # The three IDs are repository secrets, not variables: this log is public, and
+      # GitHub prints the inputs of an action but masks a secret wherever it appears.
       - name: Sign in to Azure as the eval identity (OIDC)
         if: steps.paths.outputs.run == 'true'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID_EVAL }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID_EVAL }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Set up uv
         if: steps.paths.outputs.run == 'true'
@@ -73,11 +75,12 @@ jobs:
       # A full run: every suite and every split. The step fails when the gate fails, and
       # when the model is unavailable (no report, no invented score). It appends the report
       # to the job summary and sends one `eval_run` event. Nothing here echoes a value.
+      # The endpoint is a secret for the same reason as the IDs: it names the resource.
       - name: Run the evals
         id: run
         if: steps.paths.outputs.run == 'true'
         env:
-          FOUNDRY_ENDPOINT: ${{ vars.FOUNDRY_ENDPOINT }}
+          FOUNDRY_ENDPOINT: ${{ secrets.FOUNDRY_ENDPOINT }}
           MODEL_DEPLOYMENT: ${{ vars.MODEL_DEPLOYMENT }}
           MODEL_VERSION: ${{ vars.MODEL_VERSION }}
           APPLICATIONINSIGHTS_CONNECTION_STRING: ${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}

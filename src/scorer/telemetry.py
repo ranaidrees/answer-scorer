@@ -10,9 +10,10 @@ and offline runs need no Azure resource.
 
 from __future__ import annotations
 
-import json
 import logging
+import math
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -91,6 +92,16 @@ INSTRUMENTATION_OPTIONS = {
 CUSTOM_EVENT_NAME_ATTRIBUTE = "microsoft.custom_event.name"
 SAMPLING_RATIO = 1.0  # spec C8: every trace is kept
 
+# The allow-list for custom events. Only these event names are sent, and an attribute is
+# sent only when its name is a plain identifier and its value is a number, a boolean or
+# short text made of tokens: ids, hashes, versions, dates and metric names, alone or in a
+# comma-separated list. A token has no space, so a sentence can never be sent.
+CUSTOM_EVENT_NAMES = frozenset({"eval_run"})
+MAX_EVENT_TEXT_CHARS = 400
+_EVENT_ATTRIBUTE_NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_EVENT_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+
+_logger = logging.getLogger(f"{LOGGER_NAME}.telemetry")
 _event_logger = logging.getLogger(f"{LOGGER_NAME}.events")
 _LOG_RECORD_FIELDS = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime"}
 _configured = False
@@ -202,25 +213,53 @@ def trace_id_of(span: trace.Span) -> str:
 # --- Custom events ----------------------------------------------------------------------
 
 
-def _event_value(value: object) -> str | bool | int | float:
-    if isinstance(value, (str, bool, int, float)):
-        return value
-    return json.dumps(value, default=str, sort_keys=True)
+def is_safe_event_value(value: object) -> bool:
+    """True for a boolean, a finite number, or short text made only of tokens."""
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)):
+        return math.isfinite(value)
+    if isinstance(value, str):
+        if len(value) > MAX_EVENT_TEXT_CHARS:
+            return False
+        return value == "" or all(_EVENT_TOKEN.fullmatch(part) for part in value.split(","))
+    return False
+
+
+def safe_event_attributes(attributes: Mapping[str, Any]) -> dict[str, str | bool | int | float]:
+    """The attributes the allow-list lets through. A None value is simply left out."""
+    return {
+        key: value
+        for key, value in attributes.items()
+        if value is not None
+        and isinstance(key, str)
+        and _EVENT_ATTRIBUTE_NAME.fullmatch(key)
+        and is_safe_event_value(value)
+    }
 
 
 def emit_custom_event(name: str, attributes: Mapping[str, Any]) -> None:
     """Record an Application Insights custom event. A no-op when telemetry is not configured.
 
-    The caller is responsible for the attributes holding metadata only.
+    Only an event name on the allow-list is sent, with only the attributes the allow-list
+    lets through. Anything else is dropped, never converted to text: an event with an
+    unknown name is not sent at all, and a value that is not a number, a boolean or token
+    text is left out. What was dropped is logged as a count, never as content.
     """
     if not _configured:
         return
-    extra = {
+    if name not in CUSTOM_EVENT_NAMES:
+        _logger.warning("custom event not sent: its name is not on the allow-list")
+        return
+    safe = safe_event_attributes(attributes)
+    dropped = sum(value is not None for value in attributes.values()) - len(safe)
+    if dropped:
+        _logger.warning("custom event %s: %d attributes dropped by the allow-list", name, dropped)
+    extra: dict[str, str | bool | int | float] = {
         # A key that is also a field of a log record (such as `name`) gets a trailing
         # underscore, because the logging module refuses to overwrite its own fields.
-        (f"{key}_" if key in _LOG_RECORD_FIELDS else key): _event_value(value)
-        for key, value in attributes.items()
-        if value is not None
+        (f"{key}_" if key in _LOG_RECORD_FIELDS else key): value
+        for key, value in safe.items()
     }
     extra[CUSTOM_EVENT_NAME_ATTRIBUTE] = name
     _event_logger.info(name, extra=extra)

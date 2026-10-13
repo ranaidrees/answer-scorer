@@ -9,11 +9,13 @@ name: deploy
 on:
   push:
     branches: [main]
-    # Documentation merges do not queue a deploy.
+    # Documentation merges do not queue a deploy. `*.md` matches Markdown in the
+    # repository root only (`*` never crosses a `/`), so a change to a prompt under
+    # `prompts/`, which ships in the image, still deploys.
     paths-ignore:
       - "intent/**"
       - "docs/**"
-      - "**/*.md"
+      - "*.md"
   workflow_dispatch:
     inputs:
       warm:
@@ -207,17 +209,22 @@ jobs:
             --source-ref refs/heads/main \
             --source-digest "$SOURCE_SHA"
 
+      # The three IDs are repository secrets, not variables: this log is public, and
+      # GitHub prints the inputs of an action but masks a secret wherever it appears.
       - name: Sign in to Azure (OIDC, deploy identity)
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID_DEPLOY }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID_DEPLOY }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # This log is public. Azure error text can name the subscription, the caller and
       # resource settings, so every Azure CLI call below goes through this wrapper:
       # output goes to a file or nowhere, and a failure shows only error codes,
-      # action names and a few known words.
+      # action names and a few known words. An error code is read only where the CLI
+      # itself prints one (the start of a line), and an action name only as a whole
+      # quoted word that ends in a known verb, so no part of a resource ID or of a
+      # resource name can be printed.
       - name: Prepare a quiet Azure CLI wrapper
         run: |
           set -euo pipefail
@@ -237,7 +244,8 @@ jobs:
             echo "::error::az $1 $2 failed with exit code ${status}. Its message is withheld from this public log."
             echo "Error codes, action names and known causes found in the message:"
             {
-              grep -oE '\([A-Z][A-Za-z]+\)|Microsoft\.[A-Za-z]+(/[A-Za-z]+)+' "$err"
+              sed -nE 's/^(ERROR: )?\(([A-Z][A-Za-z]+)\).*$/\2/p; s/^Code: ([A-Z][A-Za-z]+)[[:space:]]*$/\1/p' "$err"
+              grep -oE "'Microsoft\.[A-Za-z]+(/[A-Za-z]+)*/(read|write|delete|action)'" "$err" | tr -d "'"
               grep -oiE 'unauthorized|denied|manifest unknown|timed out|expired' "$err"
             } | sort -u || true
           fi
@@ -309,8 +317,9 @@ jobs:
             exit 1
           fi
 
-          previous_image="$(jq -r '.properties.template.containers[0].image // ""' "$current")"
-          previous_revision="$(jq -r '.properties.latestRevisionName // ""' "$current")"
+          # jq can quote a value in an error message, so its messages are dropped too.
+          previous_image="$(jq -r '.properties.template.containers[0].image // ""' "$current" 2>/dev/null || true)"
+          previous_revision="$(jq -r '.properties.latestRevisionName // ""' "$current" 2>/dev/null || true)"
 
           "$RUNNER_TEMP/az-quiet" - containerapp update \
             --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -326,10 +335,10 @@ jobs:
             "$RUNNER_TEMP/az-quiet" "$state" containerapp show \
               --name "$CONTAINER_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
               --query "$query" --output json
-            latest="$(jq -r '.latest // ""' "$state")"
-            ready="$(jq -r '.ready // ""' "$state")"
-            image="$(jq -r '.image // ""' "$state")"
-            port="$(jq -r '.port // ""' "$state")"
+            latest="$(jq -r '.latest // ""' "$state" 2>/dev/null || true)"
+            ready="$(jq -r '.ready // ""' "$state" 2>/dev/null || true)"
+            image="$(jq -r '.image // ""' "$state" 2>/dev/null || true)"
+            port="$(jq -r '.port // ""' "$state" 2>/dev/null || true)"
             if [ -n "$latest" ] && [ "$latest" = "$ready" ] && [ "$image" = "$target" ] && [ "$port" = "8000" ]; then
               # A changed image always makes a new revision, so the old name must be gone.
               if [ "$previous_image" = "$target" ] || [ "$latest" != "$previous_revision" ]; then
@@ -361,19 +370,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up uv
-        if: steps.route.outputs.route != 'warm'
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        if: steps.route.outputs.route != 'warm'
-        run: uv sync --locked
-
       # Health, two golden cases and one injection case against the live app, with a
       # 60 second allowance for a cold start. The host name is masked and the demo
-      # token comes from the environment secret; the script never prints it.
+      # token comes from the environment secret; the script never prints either. In
+      # remote mode the script uses the standard library only, so the runner's own
+      # Python runs it and nothing is installed.
       - name: Smoke test the live app
         if: steps.route.outputs.route != 'warm'
         env:
@@ -392,7 +393,7 @@ jobs:
             exit 1
           fi
           echo "::add-mask::${host}"
-          uv run python scripts/smoke.py --remote --base-url "https://${host}" --cold-start-seconds 60
+          python3 scripts/smoke.py --remote --base-url "https://${host}" --cold-start-seconds 60
 
       - name: Summarise
         env:

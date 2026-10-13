@@ -14,7 +14,14 @@ from pathlib import Path
 import pytest
 
 from evals import run_evals
-from evals.report import SUMMARY_END, SUMMARY_START, extract_summary
+from evals.metrics import REQUIRED_SIZES
+from evals.report import (
+    DRY_RUN_NOTE,
+    SUMMARY_END,
+    SUMMARY_START,
+    extract_summary,
+    failure_text,
+)
 from evals.run_evals import (
     EXIT_ERROR,
     EXIT_FAIL,
@@ -30,10 +37,14 @@ from evals.run_evals import (
     load_datasets,
     main,
 )
+from scorer import model_client, pipeline
 from scorer.injection import detect_injection
 from scorer.model_client import ModelResult, ModelUnavailableError
 from scorer.redact import redact
 from scorer.sanitise import sanitise
+
+# The real allow-list, bound here before any test swaps the module for a stand-in.
+from scorer.telemetry import CUSTOM_EVENT_NAMES, safe_event_attributes
 
 FULL = ["--seed", "11", "--per-minute", "0"]
 
@@ -149,22 +160,29 @@ def test_full_fake_run_writes_a_complete_report_and_gates_on_the_real_controls(t
     assert metric(report, "ungrounded_quote_rate")["n"] == 180
 
     # Flagging an injection is the job of the real, deterministic layers, which the fake
-    # does not replace. The metric must say exactly what those layers do, and the gate
-    # passes only when they catch all 18.
+    # does not replace. Those layers catch all 18 injected answers, so the dry run passes.
     injected = [
         item
         for item in build_items(load_datasets(), ("injection",))
         if item.meta["role"] == "injected"
     ]
-    missed = sorted(item.item_id for item in injected if not caught_by_our_layers(item))
+    assert [item.item_id for item in injected if not caught_by_our_layers(item)] == []
     caught = metric(report, "injection_flagged_and_routed")
-    assert (caught["count"], caught["n"]) == (18 - len(missed), 18)
-    assert sorted(miss["row_id"] for miss in report["misses"] if miss["kind"] == "defect") == missed
-    assert report["gate"]["breached"] == (["injection_flagged_and_routed"] if missed else [])
-    assert report["gate"]["status"] == ("fail" if missed else "pass")
-    assert code == (EXIT_FAIL if missed else EXIT_PASS)
-    assert out.rstrip().splitlines()[-1] == ("GATE: FAIL" if missed else "GATE: PASS")
-    assert f"## Eval gate: {'FAIL' if missed else 'PASS'}" in markdown
+    assert (caught["count"], caught["n"], caught["passed"]) == (18, 18, True)
+    assert [miss for miss in report["misses"] if miss["kind"] == "defect"] == []
+    assert report["gate"] == {"status": "pass", "breached": []}
+    assert report["gate_failures"] == []
+    assert code == EXIT_PASS
+    # A dry run can never be mistaken for a result about the scorer.
+    assert out.rstrip().splitlines()[-1] == (
+        "GATE: PASS (dry run with the fake model; says nothing about the scorer's quality)"
+    )
+    assert (
+        "## Eval gate: PASS (dry run with the fake model; says nothing about the scorer's quality)"
+        in markdown
+    )
+    assert "GATE: PASS" not in [line.strip() for line in out.splitlines()]
+    assert "**Offline dry run:**" in markdown
 
 
 def test_a_full_run_passes_the_gate_when_every_control_holds(tmp_path, capsys):
@@ -191,7 +209,8 @@ def test_fake_weak_run_fails_the_gate_and_names_the_breached_metrics(tmp_path, c
     code, report, markdown = run(tmp_path, "--fake-weak", *FULL)
     out = capsys.readouterr().out
     assert code == EXIT_FAIL
-    assert out.rstrip().splitlines()[-1] == "GATE: FAIL"
+    assert out.rstrip().splitlines()[-1] == f"GATE: FAIL ({DRY_RUN_NOTE})"
+    assert f"## Eval gate: FAIL ({DRY_RUN_NOTE})" in markdown
     breached = report["gate"]["breached"]
     for metric_id in (
         "golden_exact",
@@ -293,8 +312,8 @@ def test_model_unavailable_stops_the_run_with_no_report_and_no_score(tmp_path, c
 
 
 def test_without_a_live_client_in_the_checkout_the_run_fails_cleanly(tmp_path, capsys, monkeypatch):
-    # The live client arrives with the live-model slice. Until then, and whenever it cannot
-    # be built, a run without --fake must stop: it never falls back to a fake.
+    # Whenever the live client cannot be built (no endpoint, no sign-in), a run without
+    # --fake must stop: it never falls back to a fake.
     def unbuildable(settings):
         raise RuntimeError("no endpoint")
 
@@ -457,12 +476,19 @@ def test_cost_is_unavailable_without_a_usable_price_file(tmp_path):
 # --------------------------------------------------------------------------- eval_run event
 @pytest.fixture
 def telemetry(monkeypatch):
-    """A stand-in for `scorer.telemetry`, which the live slice adds."""
+    """A stand-in for `scorer.telemetry`: it records what is sent and when it is flushed."""
     module = types.ModuleType("scorer.telemetry")
     module.configured = True
     module.events = []
+    module.calls = []
     module.configure_telemetry = lambda settings: module.configured
-    module.emit_custom_event = lambda name, attributes: module.events.append((name, attributes))
+
+    def emit_custom_event(name, attributes):
+        module.calls.append("emit")
+        module.events.append((name, attributes))
+
+    module.emit_custom_event = emit_custom_event
+    module.flush_telemetry = lambda: module.calls.append("flush")
     monkeypatch.setitem(sys.modules, "scorer.telemetry", module)
     return module
 
@@ -534,3 +560,145 @@ def test_the_default_pace_keeps_a_full_run_inside_the_deployment_limit():
     # up to 600 out: 3 * 2,250 = 6,750. 12 inputs a minute is 81,000, inside the limit.
     assert run_evals.DEFAULT_PER_MINUTE * 3 * (1650 + 600) <= 100_000
     assert run_evals.DEFAULT_CONCURRENCY == 4
+
+
+# --------------------------------------------------------------------------- the event, checked
+def test_the_event_is_flushed_straight_after_it_is_sent(tmp_path, capsys, telemetry):
+    run(tmp_path, *FULL, "--emit-event", client_factory=passing_client)
+    assert "eval_run event: sent" in capsys.readouterr().out
+    assert telemetry.calls == ["emit", "flush"], "the process ends next, so nothing may wait"
+
+
+def test_nothing_is_flushed_when_no_event_was_sent(tmp_path, capsys, telemetry):
+    telemetry.configured = False
+    run(tmp_path, *FULL, "--emit-event", client_factory=passing_client)
+    capsys.readouterr()
+    assert telemetry.calls == []
+
+
+def test_every_eval_run_attribute_passes_the_telemetry_allow_list(tmp_path, capsys):
+    # The real allow-list, not the stand-in: nothing the runner sends may be dropped by it.
+    _, passing, _ = run(tmp_path / "pass", "--fake", *FULL)
+    _, failing, _ = run(tmp_path / "fail", "--fake-weak", *FULL)
+    capsys.readouterr()
+    for report in (passing, failing):
+        attributes = eval_event_attributes(report)
+        assert safe_event_attributes(attributes) == attributes
+        assert "eval_run" in CUSTOM_EVENT_NAMES
+    assert eval_event_attributes(failing)["breached"].count(",") >= 5
+    assert eval_event_attributes(passing)["failures"] == ""
+
+
+# --------------------------------------------------------------------------- required sizes
+def test_the_datasets_hold_exactly_the_required_sizes():
+    datasets = load_datasets()
+    injection = [row["role"] for row in datasets["injection"]]
+    pair_types = [row["pair_type"] for row in datasets["fairness"]]
+    assert REQUIRED_SIZES == {
+        "golden_answers": len(datasets["golden"]),
+        "identity_pairs": pair_types.count("identity"),
+        "dialect_verbosity_pairs": pair_types.count("dialect") + pair_types.count("verbosity"),
+        "injection_clean_answers": injection.count("clean"),
+        "injection_injected_answers": injection.count("injected"),
+        "edge_cases": len(datasets["edge"]),
+    }
+
+
+def small_datasets() -> dict[str, list[dict]]:
+    """Two golden rows, one identity pair, one dialect pair, one injected row, one edge case."""
+    full = load_datasets()
+    by_label = {row["label"]: row for row in full["golden"]}
+    by_type = {row["pair_type"]: row for row in full["fairness"]}
+    group = full["injection"][0]["group"]
+    return {
+        "golden": [by_label[1], by_label[5]],
+        "fairness": [by_type["identity"], by_type["dialect"]],
+        "injection": [
+            row for row in full["injection"] if row["group"] == group and row["variant"] != "twin"
+        ][:2],
+        "edge": full["edge"][:1],
+    }
+
+
+def test_a_full_run_over_too_few_rows_fails_the_gate_with_named_reasons(
+    tmp_path, capsys, monkeypatch
+):
+    # Every metric passes on these few rows. Before the sizes were required, so did the gate.
+    monkeypatch.setattr(run_evals, "load_datasets", small_datasets)
+    code, report, markdown = run(tmp_path, *FULL, client_factory=FakeEvalClient)
+    out = capsys.readouterr().out
+
+    assert report["run"]["mode"] == "full" and report["run"]["inputs"] == 9
+    assert report["gate"] == {"status": "fail", "breached": []}
+    assert all(item["passed"] is True for item in report["metrics"] if item["direction"])
+    assert [failure["rule"] for failure in report["gate_failures"]] == ["required_size_not_met"] * 6
+    assert code == EXIT_FAIL
+    assert out.rstrip().splitlines()[-1] == "GATE: FAIL"
+    assert (
+        "Gate failure: required_size_not_met (golden answers: 2 present, at least 30 required)"
+        in out
+    )
+    assert "## Eval gate: FAIL" in markdown
+    assert "**The gate also fails for:**" in markdown
+    for text in (
+        "golden answers: 2 present, at least 30 required",
+        "identity pairs: 1 present, at least 8 required",
+        "dialect verbosity pairs: 1 present, at least 8 required",
+        "injection clean answers: 1 present, at least 6 required",
+        "injection injected answers: 1 present, at least 18 required",
+        "edge cases: 1 present, at least 6 required",
+    ):
+        assert text in markdown
+    assert "**The gate also fails for:**" in extract_summary(markdown)
+    assert eval_event_attributes(report)["failures"] == "required_size_not_met"
+
+
+def test_a_partial_run_over_few_rows_is_not_a_size_failure(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(run_evals, "load_datasets", small_datasets)
+    code, report, markdown = run(tmp_path, "--fake", "--suite", "golden")
+    capsys.readouterr()
+    assert (code, report["gate"]["status"], report["gate_failures"]) == (
+        EXIT_PASS,
+        "not_evaluated",
+        [],
+    )
+    assert "The gate also fails for" not in markdown
+
+
+def test_a_gate_failure_never_names_a_holdout_row():
+    failure = {
+        "rule": "tripped_control_not_routed",
+        "detail": "2 answers were not routed",
+        "rows": [
+            {"row_id": "g-tw-3-a", "split": "dev"},
+            {"row_id": "g-tw-5-a", "split": "holdout"},
+        ],
+    }
+    text = failure_text(failure, code=True)
+    assert "`g-tw-3-a`" in text and "g-tw-5-a" not in text
+    assert "plus 1 on holdout rows" in text
+
+
+# --------------------------------------------------------------------------- inference settings
+def test_the_printed_inference_settings_are_the_live_clients_own_constants(tmp_path, capsys):
+    assert run_evals.FIXED_INFERENCE["reasoning_effort"] is model_client.REASONING_EFFORT
+    assert run_evals.FIXED_INFERENCE["max_completion_tokens"] is model_client.MAX_COMPLETION_TOKENS
+    assert run_evals.FIXED_INFERENCE["runs_per_answer"] is pipeline.RUNS
+
+    _, report, markdown = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+    inference = report["inference"]
+    assert inference["reasoning_effort"] == model_client.REASONING_EFFORT
+    assert inference["max_completion_tokens"] == model_client.MAX_COMPLETION_TOKENS
+    assert inference["runs_per_answer"] == pipeline.RUNS
+    assert f"| `reasoning_effort` | {model_client.REASONING_EFFORT} |" in markdown
+    assert f"| `max_completion_tokens` | {model_client.MAX_COMPLETION_TOKENS} |" in markdown
+    assert f"| Runs per answer | {pipeline.RUNS} |" in markdown
+
+
+def test_the_runner_keeps_no_copy_of_the_client_settings():
+    # The report reads the constants: it has no copy of its own to drift from them.
+    source = Path(run_evals.__file__).read_text(encoding="utf-8")
+    assert '"reasoning_effort": REASONING_EFFORT' in source
+    assert '"max_completion_tokens": MAX_COMPLETION_TOKENS' in source
+    assert '"reasoning_effort": "' not in source and '"max_completion_tokens": 6' not in source

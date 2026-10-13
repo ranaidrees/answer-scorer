@@ -27,6 +27,9 @@ from dataclasses import dataclass
 
 # A change under any of these can change a score, a metric or the gate itself.
 RELEVANT_PREFIXES = ("prompts/", "rubrics/", "src/scorer/", "evals/", "config/")
+# So can a change to either of these files, matched by exact name: a bump of the model
+# SDK or of any other dependency, or a redefined `eval` task.
+RELEVANT_FILES = ("pyproject.toml", "uv.lock")
 # Reports are output, not input.
 IGNORED_PREFIXES = ("evals/reports/",)
 
@@ -37,6 +40,8 @@ def relevant_area(path: str) -> str | None:
     """The relevant area a changed path falls under, or None if it cannot affect scoring."""
     if path.startswith(IGNORED_PREFIXES):
         return None
+    if path in RELEVANT_FILES:
+        return path
     return next((prefix for prefix in RELEVANT_PREFIXES if path.startswith(prefix)), None)
 
 
@@ -83,8 +88,9 @@ def decide(event_name: str, changed: list[str] | None, *, can_sign_in: bool) -> 
                 True,
                 f"**No relevant changes.** None of the {len(changed)} changed files is under "
                 "`prompts/`, `rubrics/`, `src/scorer/`, `evals/` (other than `evals/reports/`) "
-                "or `config/`, so no score can have changed. The model was not called and the "
-                "gate result on the base branch stands.",
+                "or `config/`, and none is `pyproject.toml` or `uv.lock`, so no score can have "
+                "changed. The model was not called and the gate result on the base branch "
+                "stands.",
             )
         listed = ", ".join(f"`{area}` ({count})" for area, count in sorted(areas.items()))
         found = f"Relevant changes: {listed}."
