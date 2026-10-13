@@ -74,7 +74,7 @@ Work through these steps in order. When a step needs the owner, stop, tell them 
 10. **Hand over.** Tell the owner, word for word:
 
     > Setup is complete. Before you start the unattended build:
-    > 1. Pause Windows Update for a week, keep the PC plugged in and, if it is a laptop, keep the lid open. Do not restart, sleep or sign out of the PC while the build runs.
+    > 1. Pause Windows Update for a week, keep the PC plugged in and, if it is a laptop, keep the lid open. Do not restart, sleep or sign out of the PC while the build runs, and do not switch the `gh` account or the Azure subscription in any terminal.
     > 2. Type /exit, then start Claude Code again from this folder with:
     >    claude --permission-mode auto --settings private\claude-overnight-settings.json
     > 3. Check that the status bar shows auto mode, then type this single line and press Enter:
@@ -115,7 +115,8 @@ This is an unattended run in the daytime. The owner may be nearby but must not b
 4. **Never touch production or anything outside the project.** Never deploy the application, never approve or reject a deployment, and never dispatch `deploy.yml` in this phase. Never change the Azure subscription, and never touch anything outside `rg-answer-scorer-demo` and this repo.
 5. **Keep the public repo clean.** Follow the rules for every phase at the top of this file.
 6. **Keep going.** Do not end your turn while work remains. When waiting for CI, poll with `gh pr checks --watch` or `gh run watch`. After any context compaction, re-read `CLAUDE.md`, the Status section of `plan.md` and these rules before continuing.
-7. **Keep to the clock.** Follow the targets and "Keeping to the clock" in the Waves section of `plan.md`. Stop and give the build report by Wednesday 14 October at 09:00 at the latest, whatever the state.
+7. **Never push to `main`.** Every change goes through a pull request, including the Status updates in `plan.md`: carry each Status update on the next slice branch, or open a small `status` pull request when no other branch is open.
+8. **Keep to the clock.** Follow the targets and "Keeping to the clock" in the Waves section of `plan.md`. Stop and give the build report by Wednesday 14 October at 09:00 at the latest, whatever the state.
 
 **Order of work.** `plan.md` has the detail for every slice; follow "How every slice runs" for each one.
 
