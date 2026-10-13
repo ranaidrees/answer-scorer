@@ -1,8 +1,9 @@
 """Request, response and model-output shapes (spec FR-1, FR-4 step 6, FR-5).
 
 The request is identity-blind: it has no name, gender, age, ethnicity, nationality or
-photo field, and unknown fields are rejected. Length limits are checked in the pipeline,
-so that a breach returns a named 400 code and is never silently truncated.
+photo field, and unknown fields are rejected. Length limits (the answer's and the
+question's) are checked in the pipeline, so that a breach returns a named 400 code and is
+never silently truncated.
 """
 
 from __future__ import annotations

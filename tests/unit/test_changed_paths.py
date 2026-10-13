@@ -31,6 +31,9 @@ SHA_B = "b" * 40
         ("evals/run_evals.py", "evals/"),
         ("evals/changed_paths.py", "evals/"),
         ("config/prices.yaml", "config/"),
+        # A dependency bump (the model SDK) or a redefined eval task can change a score.
+        ("pyproject.toml", "pyproject.toml"),
+        ("uv.lock", "uv.lock"),
     ],
 )
 def test_paths_that_can_change_a_score_or_the_gate_are_relevant(path, area):
@@ -48,7 +51,12 @@ def test_paths_that_can_change_a_score_or_the_gate_are_relevant(path, area):
         "infra/main.bicep",
         "tests/unit/test_metrics.py",
         ".github/workflows/evals.yml",
-        "pyproject.toml",
+        # Only the two files in the repository root count, by exact name.
+        "docs/pyproject.toml",
+        "tools/uv.lock",
+        "pyproject.toml.bak",
+        "uv.lock.orig",
+        "PYPROJECT.TOML",
         "src/other/module.py",
         "notprompts/x.md",
         "docs/prompts/notes.md",
@@ -77,6 +85,30 @@ def test_a_pull_request_with_a_relevant_change_runs_the_evals():
     decision = decide("pull_request", changed, can_sign_in=True)
     assert (decision.run, decision.ok) == (True, True)
     assert "`prompts/` (2)" in decision.summary and "`config/` (1)" in decision.summary
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [["pyproject.toml", "uv.lock"], ["uv.lock"], ["pyproject.toml"], ["README.md", "uv.lock"]],
+)
+def test_a_dependency_only_pull_request_runs_the_evals(changed):
+    decision = decide("pull_request", changed, can_sign_in=True)
+    assert (decision.run, decision.ok) == (True, True)
+    assert "No relevant changes" not in decision.summary
+    for name in changed:
+        if name != "README.md":
+            assert f"`{name}` (1)" in decision.summary
+
+
+def test_a_dependency_only_pull_request_that_cannot_sign_in_fails():
+    decision = decide("pull_request", ["pyproject.toml", "uv.lock"], can_sign_in=False)
+    assert (decision.run, decision.ok) == (False, False)
+    assert "The gate cannot be proven" in decision.summary
+
+
+def test_the_no_relevant_changes_summary_names_the_dependency_files():
+    summary = decide("pull_request", ["README.md"], can_sign_in=True).summary
+    assert "`pyproject.toml`" in summary and "`uv.lock`" in summary
 
 
 def test_one_relevant_file_among_many_is_enough():

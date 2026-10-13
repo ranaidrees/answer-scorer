@@ -56,7 +56,7 @@ The signed-in owner also holds Cognitive Services OpenAI User on the Foundry res
 
 A workflow in any other repository presents a different subject and is refused, and so does a job in this repository that runs outside the `demo` environment and asks for `id-deploy`. `id-eval` is wider on purpose: its pull request subject does not name a branch, so a pull request run from any branch of this repository can sign in as `id-eval`. That is accepted because `id-eval` holds only the inference role, and only people with write access can push a branch here. Pull requests from forks are a separate case: their workflows wait for approval, receive no secrets and only a read-only token, and cannot request an OIDC token, so they cannot sign in as `id-eval`.
 
-The tenant, subscription and client IDs are GitHub repository variables; they appear in no file.
+The tenant, subscription and client IDs and the Foundry endpoint are GitHub repository secrets; they appear in no file. They are secrets and not variables because the repository is public: GitHub prints the inputs and environment of a step in the job log and masks only secrets, so a variable passed to the sign-in step is shown to anyone who opens the run. No workflow reads any of the five from a variable, and a test fails if one does.
 
 ## What is set where
 
@@ -68,12 +68,12 @@ The tenant, subscription and client IDs are GitHub repository variables; they ap
 | `id-deploy`, `id-eval`, their federated credentials and role assignments | Azure CLI, after provisioning |
 | `.env.local` (git-ignored), with a generated demo token and answer-hash salt | `scripts/setup_env_local.py --write` |
 | Container App secrets `demo-token` and `answer-hash-salt`, and the variables `DEMO_TOKEN` and `ANSWER_HASH_SALT` that reference them | `scripts/setup_env_local.py --push` |
-| GitHub repository secret `APPLICATIONINSIGHTS_CONNECTION_STRING`, `demo` environment secret `DEMO_TOKEN` | `scripts/setup_env_local.py --push` |
-| GitHub repository variables `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID_DEPLOY`, `AZURE_CLIENT_ID_EVAL`, `AZURE_RESOURCE_GROUP`, `CONTAINER_APP_NAME`, `FOUNDRY_ENDPOINT`, `MODEL_DEPLOYMENT`, `MODEL_VERSION` | `scripts/setup_env_local.py --push` |
+| GitHub repository secrets `APPLICATIONINSIGHTS_CONNECTION_STRING`, `FOUNDRY_ENDPOINT`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID_DEPLOY` and `AZURE_CLIENT_ID_EVAL`; `demo` environment secret `DEMO_TOKEN` | `scripts/setup_env_local.py --push` |
+| GitHub repository variables `AZURE_RESOURCE_GROUP`, `CONTAINER_APP_NAME`, `MODEL_DEPLOYMENT`, `MODEL_VERSION` (fixed names that identify nothing) | `scripts/setup_env_local.py --push` |
 
 `FOUNDRY_ENDPOINT` is the scheme and host of the Foundry resource with no trailing slash. The application calls `<FOUNDRY_ENDPOINT>/openai/v1/`.
 
-The script prints only the names of what it wrote or set, never a value. Provisioning `main.bicep` again removes the Container App secrets and their two variables, so `--push` must be run again after any provision. After the first application deploy `main.bicep` is not provisioned again at all, because it would also put the placeholder image and port back.
+The script prints only the names of what it wrote, set or removed, never a value. `--push` also deletes any GitHub variable left under the name of one of the five identifying secrets. Provisioning `main.bicep` again removes the Container App secrets and their two variables, so `--push` must be run again after any provision. After the first application deploy `main.bicep` is not provisioned again at all, because it would also put the placeholder image and port back.
 
 ## Spend controls
 

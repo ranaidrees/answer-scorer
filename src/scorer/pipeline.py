@@ -29,6 +29,7 @@ from scorer.config import (
     load_prompt,
     load_rubric,
 )
+from scorer.echo import echoes_question
 from scorer.grounding import MAX_QUOTES, check_evidence
 from scorer.injection import detect_injection, neutralise_delimiters
 from scorer.model_client import ModelClient, ModelResult, ModelUnavailableError
@@ -48,6 +49,9 @@ logger = logging.getLogger("scorer.pipeline")
 
 MIN_ANSWER_CHARS = 30
 MAX_ANSWER_CHARS = 4000
+# The question is caller text that reaches the model three times, so it has a limit too.
+# The longest question in the datasets and on the demo page is under 80 characters.
+MAX_QUESTION_CHARS = 500
 RUNS = 3
 
 ANSWER_OPEN = "<candidate_answer>"
@@ -76,6 +80,7 @@ class ScoringError(Exception):
             "answer_too_short",
             "answer_too_long",
             "answer_empty_after_redaction",
+            "question_too_long",
         }
     )
     status = 400
@@ -137,7 +142,10 @@ def build_messages(
 
 
 def _prepare_question(question: str) -> str:
-    """Clean the question the same way as the answer. It sets no flag (decision S2-6)."""
+    """Clean the question the same way as the answer. It sets no flag (decision S2-6).
+
+    Its length is checked in step 1, on the question as received (decision F-5).
+    """
     return neutralise_delimiters(sanitise(question).text).strip()
 
 
@@ -186,6 +194,10 @@ async def score_answer(
         raise ScoringError(
             "answer_too_short", f"The answer is under {MIN_ANSWER_CHARS} characters."
         )
+    if len(request.question) > MAX_QUESTION_CHARS:
+        raise ScoringError(
+            "question_too_long", f"The question is over {MAX_QUESTION_CHARS} characters."
+        )
     prompt = load_prompt(settings)
 
     # 2 and 3. Sanitise, then redact contact details.
@@ -230,7 +242,9 @@ async def score_answer(
         level_label = rubric.label_for(score)
         rationale = combined.chosen.rationale.strip()
         flags.inconsistent = combined.inconsistent
-        flags.off_topic = combined.off_topic
+        # Off topic when most runs say so, or when the answer only repeats the question
+        # (a deterministic check, so this control does not depend on the model).
+        flags.off_topic = combined.off_topic or echoes_question(request.question, answer)
         # 8. Grounding check on every evidence quote.
         # Only the first MAX_QUOTES are checked; any more count as ungrounded.
         grounding = check_evidence(combined.chosen.evidence, answer, max_quotes=MAX_QUOTES)

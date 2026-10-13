@@ -7,14 +7,19 @@ request it rejects.
 
 from __future__ import annotations
 
+import json
+import re
+
 import pytest
 from pydantic import ValidationError
 
 from scorer.model_client import FakeModelClient, ModelUnavailableError
-from scorer.pipeline import GUARDRAIL_RATIONALE, ScoringError
+from scorer.pipeline import GUARDRAIL_RATIONALE, MAX_QUESTION_CHARS, ScoringError
 from scorer.schemas import NOTICE, ScoreRequest
 from tests.unit.samples import (
+    ACTIVE_PROMPT_VERSION,
     EXACT_QUOTE,
+    REPO_ROOT,
     TEAMWORK_ANSWER,
     good_client,
     make_request,
@@ -52,7 +57,7 @@ def test_fr1_response_carries_every_field_of_the_contract():
     assert body["runs"] == [4, 4, 4]
     assert body["spread"] == 0
     assert body["evidence"] == [{"quote": EXACT_QUOTE, "grounded": True}]
-    assert body["prompt_version"] == "v1"
+    assert body["prompt_version"] == ACTIVE_PROMPT_VERSION
     assert body["model_deployment"] == "scorer-mini"
     assert body["notice"] == NOTICE == "Decision support only. A trained person makes the decision."
     assert len(body["request_id"]) == 36
@@ -158,12 +163,49 @@ def test_fr1_scoring_error_messages_never_contain_candidate_text():
     assert "07700" not in str(error) and "Call me" not in str(error)
 
 
-def test_fr1_scoring_error_only_accepts_the_four_documented_codes():
+def test_fr1_a_question_over_500_characters_is_a_400_with_no_model_call():
+    client = good_client()
+    marker = "zebra-quartz-lantern"
+    question = (marker + " ") * 2500  # about 50,000 characters
+    error = _rejected(make_request(question=question), client)
+    assert error.code == "question_too_long"
+    assert marker not in str(error) and marker not in error.message
+
+    error = _rejected(make_request(question="q" * (MAX_QUESTION_CHARS + 1)), good_client())
+    assert error.code == "question_too_long"
+    assert MAX_QUESTION_CHARS == 500
+
+
+def test_fr1_a_question_of_exactly_500_characters_is_scored_whole():
+    client = good_client()
+    question = ("Tell me about a time you resolved a conflict in a team. " * 10)[:500].strip()
+    question = question + "?" * (500 - len(question))
+    assert len(question) == MAX_QUESTION_CHARS
+    outcome = run_score(make_request(question=question), client)
+    assert outcome.response.score == 4
+    assert question in user_message(client), "the whole question reaches the model"
+
+
+def test_fr1_every_question_in_the_datasets_and_on_the_demo_page_is_inside_the_limit():
+    questions = [
+        json.loads(line)["question"]
+        for path in sorted((REPO_ROOT / "evals" / "datasets").glob("*.jsonl"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    page = (REPO_ROOT / "src" / "scorer" / "ui" / "index.html").read_text(encoding="utf-8")
+    questions += re.findall(r'"(Tell me about [^"]*|Describe [^"]*)"', page)
+    assert len(questions) > 80
+    assert max(len(question) for question in questions) <= MAX_QUESTION_CHARS // 5
+
+
+def test_fr1_scoring_error_only_accepts_the_five_documented_codes():
     assert ScoringError.CODES == {
         "unknown_competency",
         "answer_too_short",
         "answer_too_long",
         "answer_empty_after_redaction",
+        "question_too_long",
     }
     with pytest.raises(ValueError):
         ScoringError("something_else", "not a documented code")

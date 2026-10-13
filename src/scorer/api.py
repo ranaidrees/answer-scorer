@@ -5,6 +5,10 @@ Routes: `POST /api/score`, `GET /healthz`, `GET /readyz` and `GET /`.
 Nothing here logs a request body, an answer, a question, a rationale or an evidence quote,
 and no error body ever echoes the input. A model failure is a 503 with no score of any
 kind. A platform guardrail block is a 200 with `score: null`, as the pipeline returns it.
+
+Importing this module builds nothing and configures nothing. The app for the server
+(`scorer.api:app`) is built from the environment the first time it is asked for, which is
+when the server starts. Tests call `create_app` with their own settings.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import heapq
 import hmac
 import logging
 import re
@@ -60,7 +65,14 @@ _INLINE_BLOCK = re.compile(r"<(script|style)>(.*?)</\1>", re.DOTALL)
 
 
 class RateLimiter:
-    """A sliding-window limit per key, held in memory. One process, so one replica each."""
+    """A sliding-window limit per key, held in memory. One process, so one replica each.
+
+    Memory is bounded: at most `max_keys` keys, each with at most `limit` time stamps.
+    When the table is full, keys with nothing left in the window go first, then the
+    quietest keys (fewest requests in the window, oldest first). A key that is at its
+    limit is the busiest there is, so a flood of new keys pushes out other new keys and
+    never resets a caller who is being limited.
+    """
 
     def __init__(
         self,
@@ -82,7 +94,7 @@ class RateLimiter:
         hits = self._hits.get(key)
         if hits is None:
             if len(self._hits) >= self._max_keys:
-                self._drop_idle(cutoff)
+                self._make_room(cutoff)
             hits = self._hits[key] = deque()
         while hits and hits[0] <= cutoff:
             hits.popleft()
@@ -91,19 +103,40 @@ class RateLimiter:
         hits.append(now)
         return True
 
-    def _drop_idle(self, cutoff: float) -> None:
-        for key in [key for key, hits in self._hits.items() if not hits or hits[-1] <= cutoff]:
+    def _make_room(self, cutoff: float) -> None:
+        """Make room for one new key without ever clearing the whole table."""
+        for key, hits in list(self._hits.items()):
+            while hits and hits[0] <= cutoff:
+                hits.popleft()
+            if not hits:
+                del self._hits[key]
+        excess = len(self._hits) - self._max_keys + 1
+        if excess <= 0:
+            return
+        # Still full of active keys. Drop the quietest, a tenth of the table at a time so
+        # that a flood does not pay for a full scan on every request.
+        batch = max(excess, self._max_keys // 10)
+        quietest = heapq.nsmallest(
+            batch, self._hits.items(), key=lambda item: (len(item[1]), item[1][-1])
+        )
+        for key, _ in quietest:
             del self._hits[key]
-        if len(self._hits) >= self._max_keys:
-            # Still full of active keys: start again rather than grow without limit.
-            self._hits.clear()
 
 
 def client_address(request: Request) -> str:
-    """The first `X-Forwarded-For` hop when present, else the peer address."""
-    first_hop = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if first_hop:
-        return first_hop[:64]
+    """The address the rate limit counts: the last `X-Forwarded-For` hop, else the peer.
+
+    The Container Apps ingress appends the address it received the connection from as
+    the last value of the header, and everything before that value is whatever the caller
+    sent (https://learn.microsoft.com/azure/container-apps/ingress-overview#http-headers).
+    So only the last hop is trusted: a caller can neither pick a fresh key for every
+    request nor spend another address's allowance by naming it. Without the header (a
+    local run with no ingress in front) the socket's peer address is used.
+    """
+    forwarded = ",".join(request.headers.getlist("x-forwarded-for"))
+    last_hop = forwarded.rsplit(",", 1)[-1].strip()
+    if last_hop:
+        return last_hop[:64]
     return request.client.host if request.client else "unknown"
 
 
@@ -304,4 +337,20 @@ async def _warm(warm: Callable[[], object]) -> None:
         logger.warning("token warm-up did not complete: %s", type(error).__name__)
 
 
-app = create_app()
+def __getattr__(name: str) -> FastAPI:
+    """Build `app` from the environment when the server first asks for it.
+
+    `uvicorn scorer.api:app` reads this attribute at start-up, so the app, its model
+    client and its telemetry are set up then and not when the module is imported. A test
+    that imports `create_app` in a shell that holds the real connection string therefore
+    configures no exporter.
+    """
+    if name == "app":
+        try:
+            built = create_app()
+        except AttributeError as error:
+            # Otherwise the server would report a fault here as a missing attribute.
+            raise RuntimeError("the app could not be built") from error
+        globals()["app"] = built
+        return built
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -243,21 +243,103 @@ def test_push_prints_names_only_and_sends_github_values_on_stdin(commands, tmp_p
     setters = [
         (command, stdin) for command, stdin in commands.calls if command[:2] == ["gh", "secret"]
     ]
-    setters += [(c, stdin) for c, stdin in commands.calls if c[:2] == ["gh", "variable"]]
+    setters += [(c, stdin) for c, stdin in commands.calls if c[:3] == ["gh", "variable", "set"]]
     assert setters, "no GitHub value was set"
     for command, stdin in setters:
         assert stdin, f"{command[:4]} was given no value on stdin"
         assert stdin not in command
-    sent = {command[3]: stdin for command, stdin in setters if command[1] == "variable"}
-    assert sent["AZURE_TENANT_ID"] == "fake-tenant"
-    assert sent["AZURE_SUBSCRIPTION_ID"] == "fake-subscription"
-    assert sent["AZURE_CLIENT_ID_DEPLOY"] == "fake-client"
+    # The IDs and the endpoint are secrets: a variable is printed in public workflow logs.
+    secrets = {
+        command[3]: stdin
+        for command, stdin in setters
+        if command[:3] == ["gh", "secret", "set"] and "--env" not in command
+    }
+    assert secrets == {
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": CONNECTION,
+        "FOUNDRY_ENDPOINT": AZD_VALUES["FOUNDRY_ENDPOINT"],
+        "AZURE_TENANT_ID": "fake-tenant",
+        "AZURE_SUBSCRIPTION_ID": "fake-subscription",
+        "AZURE_CLIENT_ID_DEPLOY": "fake-client",
+        "AZURE_CLIENT_ID_EVAL": "fake-client",
+    }
+    variables = {command[3]: stdin for command, stdin in setters if command[1] == "variable"}
+    assert variables == {
+        key: AZD_VALUES[key]
+        for key in (
+            "AZURE_RESOURCE_GROUP",
+            "CONTAINER_APP_NAME",
+            "MODEL_DEPLOYMENT",
+            "MODEL_VERSION",
+        )
+    }
+    assert not set(variables) & set(setup.IDENTIFYING_SECRETS)
+    for name in setup.IDENTIFYING_SECRETS:
+        assert f"set: GitHub repository secret {name}" in captured.out
+        assert f"set: GitHub repository variable {name}" not in captured.out
     environment = [command for command, _ in setters if "--env" in command]
     assert environment == [["gh", "secret", "set", "DEMO_TOKEN", "--env", "demo"]]
 
     update = next(command for command, _ in commands.calls if "update" in command)
     assert "DEMO_TOKEN=secretref:demo-token" in update
     assert "ANSWER_HASH_SALT=secretref:answer-hash-salt" in update
+
+
+def test_the_five_identifiers_are_secrets_and_never_variables():
+    assert set(setup.IDENTIFYING_SECRETS) == {
+        "AZURE_TENANT_ID",
+        "AZURE_SUBSCRIPTION_ID",
+        "AZURE_CLIENT_ID_DEPLOY",
+        "AZURE_CLIENT_ID_EVAL",
+        "FOUNDRY_ENDPOINT",
+    }
+    assert not set(setup.VARIABLES_FROM_FILE) & set(setup.IDENTIFYING_SECRETS)
+
+
+def test_push_deletes_an_old_variable_for_each_identifier(commands, tmp_path, capsys):
+    write_env_file(tmp_path)
+
+    assert setup.main(["--push"]) == 0
+
+    deleted = [
+        command for command, _ in commands.calls if command[:3] == ["gh", "variable", "delete"]
+    ]
+    assert [command[3] for command in deleted] == list(setup.IDENTIFYING_SECRETS)
+    assert all(len(command) == 4 for command in deleted), "a name only, never a value"
+    # Each secret is set before the variable of the same name is deleted.
+    order = [command[1:4] for command, _ in commands.calls if command[0] == "gh"]
+    for name in setup.IDENTIFYING_SECRETS:
+        assert order.index(["secret", "set", name]) < order.index(["variable", "delete", name])
+    output = capsys.readouterr().out
+    for name in setup.IDENTIFYING_SECRETS:
+        assert f"removed: GitHub repository variable {name}" in output
+
+
+def test_push_ignores_an_old_variable_that_is_not_there(monkeypatch, tmp_path, capsys):
+    message = "failed to delete variable: HTTP 404: Not Found"
+    fake = FakeCommands(fail_on={"variable delete": message})
+    monkeypatch.setattr(setup, "ROOT", tmp_path)
+    monkeypatch.setattr(setup, "run", fake)
+    write_env_file(tmp_path)
+
+    assert setup.main(["--push"]) == 0
+
+    captured = capsys.readouterr()
+    assert "removed:" not in captured.out and "HTTP" not in captured.err
+    assert "set: GitHub repository variable MODEL_VERSION" in captured.out
+    assert len([c for c, _ in fake.calls if c[:3] == ["gh", "variable", "delete"]]) == 5
+
+
+def test_push_fails_when_an_old_variable_cannot_be_deleted(monkeypatch, tmp_path, capsys):
+    fake = FakeCommands(fail_on={"variable delete": "gh: Forbidden (HTTP 403)"})
+    monkeypatch.setattr(setup, "ROOT", tmp_path)
+    monkeypatch.setattr(setup, "run", fake)
+    write_env_file(tmp_path)
+
+    assert setup.main(["--push"]) == 1
+
+    captured = capsys.readouterr()
+    assert "GitHub variable AZURE_TENANT_ID removal failed" in captured.err
+    assert "HTTP" not in captured.err and "removed:" not in captured.out
 
 
 def test_push_carries_on_when_the_demo_environment_does_not_exist(monkeypatch, tmp_path, capsys):

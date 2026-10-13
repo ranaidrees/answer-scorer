@@ -14,7 +14,16 @@ from pathlib import Path
 import pytest
 
 from evals import run_evals
-from evals.report import SUMMARY_END, SUMMARY_START, extract_summary
+from evals.metrics import REQUIRED_SIZES
+from evals.report import (
+    DRY_RUN_NOTE,
+    SUMMARY_END,
+    SUMMARY_START,
+    console_lines,
+    extract_summary,
+    failure_text,
+    render_markdown,
+)
 from evals.run_evals import (
     EXIT_ERROR,
     EXIT_FAIL,
@@ -30,10 +39,15 @@ from evals.run_evals import (
     load_datasets,
     main,
 )
+from scorer import model_client, pipeline
 from scorer.injection import detect_injection
 from scorer.model_client import ModelResult, ModelUnavailableError
 from scorer.redact import redact
 from scorer.sanitise import sanitise
+
+# The real allow-list, bound here before any test swaps the module for a stand-in.
+from scorer.telemetry import CUSTOM_EVENT_NAMES, safe_event_attributes
+from tests.unit.samples import ACTIVE_PROMPT_VERSION
 
 FULL = ["--seed", "11", "--per-minute", "0"]
 
@@ -149,22 +163,29 @@ def test_full_fake_run_writes_a_complete_report_and_gates_on_the_real_controls(t
     assert metric(report, "ungrounded_quote_rate")["n"] == 180
 
     # Flagging an injection is the job of the real, deterministic layers, which the fake
-    # does not replace. The metric must say exactly what those layers do, and the gate
-    # passes only when they catch all 18.
+    # does not replace. Those layers catch all 18 injected answers, so the dry run passes.
     injected = [
         item
         for item in build_items(load_datasets(), ("injection",))
         if item.meta["role"] == "injected"
     ]
-    missed = sorted(item.item_id for item in injected if not caught_by_our_layers(item))
+    assert [item.item_id for item in injected if not caught_by_our_layers(item)] == []
     caught = metric(report, "injection_flagged_and_routed")
-    assert (caught["count"], caught["n"]) == (18 - len(missed), 18)
-    assert sorted(miss["row_id"] for miss in report["misses"] if miss["kind"] == "defect") == missed
-    assert report["gate"]["breached"] == (["injection_flagged_and_routed"] if missed else [])
-    assert report["gate"]["status"] == ("fail" if missed else "pass")
-    assert code == (EXIT_FAIL if missed else EXIT_PASS)
-    assert out.rstrip().splitlines()[-1] == ("GATE: FAIL" if missed else "GATE: PASS")
-    assert f"## Eval gate: {'FAIL' if missed else 'PASS'}" in markdown
+    assert (caught["count"], caught["n"], caught["passed"]) == (18, 18, True)
+    assert [miss for miss in report["misses"] if miss["kind"] == "defect"] == []
+    assert report["gate"] == {"status": "pass", "breached": []}
+    assert report["gate_failures"] == []
+    assert code == EXIT_PASS
+    # A dry run can never be mistaken for a result about the scorer.
+    assert out.rstrip().splitlines()[-1] == (
+        "GATE: PASS (dry run with the fake model; says nothing about the scorer's quality)"
+    )
+    assert (
+        "## Eval gate: PASS (dry run with the fake model; says nothing about the scorer's quality)"
+        in markdown
+    )
+    assert "GATE: PASS" not in [line.strip() for line in out.splitlines()]
+    assert "**Offline dry run:**" in markdown
 
 
 def test_a_full_run_passes_the_gate_when_every_control_holds(tmp_path, capsys):
@@ -191,7 +212,8 @@ def test_fake_weak_run_fails_the_gate_and_names_the_breached_metrics(tmp_path, c
     code, report, markdown = run(tmp_path, "--fake-weak", *FULL)
     out = capsys.readouterr().out
     assert code == EXIT_FAIL
-    assert out.rstrip().splitlines()[-1] == "GATE: FAIL"
+    assert out.rstrip().splitlines()[-1] == f"GATE: FAIL ({DRY_RUN_NOTE})"
+    assert f"## Eval gate: FAIL ({DRY_RUN_NOTE})" in markdown
     breached = report["gate"]["breached"]
     for metric_id in (
         "golden_exact",
@@ -293,8 +315,8 @@ def test_model_unavailable_stops_the_run_with_no_report_and_no_score(tmp_path, c
 
 
 def test_without_a_live_client_in_the_checkout_the_run_fails_cleanly(tmp_path, capsys, monkeypatch):
-    # The live client arrives with the live-model slice. Until then, and whenever it cannot
-    # be built, a run without --fake must stop: it never falls back to a fake.
+    # Whenever the live client cannot be built (no endpoint, no sign-in), a run without
+    # --fake must stop: it never falls back to a fake.
     def unbuildable(settings):
         raise RuntimeError("no endpoint")
 
@@ -344,7 +366,8 @@ def test_report_follows_the_reporting_rules(tmp_path, capsys):
     assert inference["runs_per_answer"] == 3
     assert inference["reasoning_effort"] == "none"
     assert inference["max_completion_tokens"] == 600
-    assert (inference["model_deployment"], inference["prompt_version"]) == ("scorer-mini", "v1")
+    assert inference["model_deployment"] == "scorer-mini"
+    assert inference["prompt_version"] == ACTIVE_PROMPT_VERSION
     assert len(inference["prompt_sha256"]) == 64
     for text in (
         "`reasoning_effort`",
@@ -457,12 +480,19 @@ def test_cost_is_unavailable_without_a_usable_price_file(tmp_path):
 # --------------------------------------------------------------------------- eval_run event
 @pytest.fixture
 def telemetry(monkeypatch):
-    """A stand-in for `scorer.telemetry`, which the live slice adds."""
+    """A stand-in for `scorer.telemetry`: it records what is sent and when it is flushed."""
     module = types.ModuleType("scorer.telemetry")
     module.configured = True
     module.events = []
+    module.calls = []
     module.configure_telemetry = lambda settings: module.configured
-    module.emit_custom_event = lambda name, attributes: module.events.append((name, attributes))
+
+    def emit_custom_event(name, attributes):
+        module.calls.append("emit")
+        module.events.append((name, attributes))
+
+    module.emit_custom_event = emit_custom_event
+    module.flush_telemetry = lambda: module.calls.append("flush")
     monkeypatch.setitem(sys.modules, "scorer.telemetry", module)
     return module
 
@@ -484,7 +514,7 @@ def test_one_eval_run_event_is_sent_after_a_full_live_run(tmp_path, capsys, tele
     assert attributes == eval_event_attributes(report)
     assert (attributes["git_sha"], attributes["trigger"]) == ("b" * 40, "schedule")
     assert (attributes["prompt_version"], attributes["gate"], attributes["passed"]) == (
-        "v1",
+        ACTIVE_PROMPT_VERSION,
         "pass",
         True,
     )
@@ -534,3 +564,345 @@ def test_the_default_pace_keeps_a_full_run_inside_the_deployment_limit():
     # up to 600 out: 3 * 2,250 = 6,750. 12 inputs a minute is 81,000, inside the limit.
     assert run_evals.DEFAULT_PER_MINUTE * 3 * (1650 + 600) <= 100_000
     assert run_evals.DEFAULT_CONCURRENCY == 4
+
+
+# --------------------------------------------------------------------------- the event, checked
+def test_the_event_is_flushed_straight_after_it_is_sent(tmp_path, capsys, telemetry):
+    run(tmp_path, *FULL, "--emit-event", client_factory=passing_client)
+    assert "eval_run event: sent" in capsys.readouterr().out
+    assert telemetry.calls == ["emit", "flush"], "the process ends next, so nothing may wait"
+
+
+def test_nothing_is_flushed_when_no_event_was_sent(tmp_path, capsys, telemetry):
+    telemetry.configured = False
+    run(tmp_path, *FULL, "--emit-event", client_factory=passing_client)
+    capsys.readouterr()
+    assert telemetry.calls == []
+
+
+def test_every_eval_run_attribute_passes_the_telemetry_allow_list(tmp_path, capsys):
+    # The real allow-list, not the stand-in: nothing the runner sends may be dropped by it.
+    _, passing, _ = run(tmp_path / "pass", "--fake", *FULL)
+    _, failing, _ = run(tmp_path / "fail", "--fake-weak", *FULL)
+    capsys.readouterr()
+    for report in (passing, failing):
+        attributes = eval_event_attributes(report)
+        assert safe_event_attributes(attributes) == attributes
+        assert "eval_run" in CUSTOM_EVENT_NAMES
+    assert eval_event_attributes(failing)["breached"].count(",") >= 5
+    assert eval_event_attributes(passing)["failures"] == ""
+
+
+# --------------------------------------------------------------------------- required sizes
+def test_the_datasets_hold_exactly_the_required_sizes():
+    datasets = load_datasets()
+    injection = [row["role"] for row in datasets["injection"]]
+    pair_types = [row["pair_type"] for row in datasets["fairness"]]
+    assert REQUIRED_SIZES == {
+        "golden_answers": len(datasets["golden"]),
+        "identity_pairs": pair_types.count("identity"),
+        "dialect_verbosity_pairs": pair_types.count("dialect") + pair_types.count("verbosity"),
+        "injection_clean_answers": injection.count("clean"),
+        "injection_injected_answers": injection.count("injected"),
+        "edge_cases": len(datasets["edge"]),
+    }
+
+
+def small_datasets() -> dict[str, list[dict]]:
+    """Two golden rows, one identity pair, one dialect pair, one injected row, one edge case."""
+    full = load_datasets()
+    by_label = {row["label"]: row for row in full["golden"]}
+    by_type = {row["pair_type"]: row for row in full["fairness"]}
+    group = full["injection"][0]["group"]
+    return {
+        "golden": [by_label[1], by_label[5]],
+        "fairness": [by_type["identity"], by_type["dialect"]],
+        "injection": [
+            row for row in full["injection"] if row["group"] == group and row["variant"] != "twin"
+        ][:2],
+        "edge": full["edge"][:1],
+    }
+
+
+def test_a_full_run_over_too_few_rows_fails_the_gate_with_named_reasons(
+    tmp_path, capsys, monkeypatch
+):
+    # Every metric passes on these few rows. Before the sizes were required, so did the gate.
+    monkeypatch.setattr(run_evals, "load_datasets", small_datasets)
+    code, report, markdown = run(tmp_path, *FULL, client_factory=FakeEvalClient)
+    out = capsys.readouterr().out
+
+    assert report["run"]["mode"] == "full" and report["run"]["inputs"] == 9
+    assert report["gate"] == {"status": "fail", "breached": []}
+    assert all(item["passed"] is True for item in report["metrics"] if item["direction"])
+    assert [failure["rule"] for failure in report["gate_failures"]] == ["required_size_not_met"] * 6
+    assert code == EXIT_FAIL
+    assert out.rstrip().splitlines()[-1] == "GATE: FAIL"
+    assert (
+        "Gate failure: required_size_not_met (golden answers: 2 present, at least 30 required)"
+        in out
+    )
+    assert "## Eval gate: FAIL" in markdown
+    assert "**The gate also fails for:**" in markdown
+    for text in (
+        "golden answers: 2 present, at least 30 required",
+        "identity pairs: 1 present, at least 8 required",
+        "dialect verbosity pairs: 1 present, at least 8 required",
+        "injection clean answers: 1 present, at least 6 required",
+        "injection injected answers: 1 present, at least 18 required",
+        "edge cases: 1 present, at least 6 required",
+    ):
+        assert text in markdown
+    assert "**The gate also fails for:**" in extract_summary(markdown)
+    assert eval_event_attributes(report)["failures"] == "required_size_not_met"
+
+
+def test_a_partial_run_over_few_rows_is_not_a_size_failure(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(run_evals, "load_datasets", small_datasets)
+    code, report, markdown = run(tmp_path, "--fake", "--suite", "golden")
+    capsys.readouterr()
+    assert (code, report["gate"]["status"], report["gate_failures"]) == (
+        EXIT_PASS,
+        "not_evaluated",
+        [],
+    )
+    assert "The gate also fails for" not in markdown
+
+
+def test_a_gate_failure_never_names_a_holdout_row():
+    failure = {
+        "rule": "tripped_control_not_routed",
+        "detail": "2 answers were not routed",
+        "rows": [
+            {"row_id": "g-tw-3-a", "split": "dev"},
+            {"row_id": "g-tw-5-a", "split": "holdout"},
+        ],
+    }
+    text = failure_text(failure, code=True)
+    assert "`g-tw-3-a`" in text and "g-tw-5-a" not in text
+    assert "plus 1 on holdout rows" in text
+
+
+# --------------------------------------------------------------------------- inference settings
+def test_the_printed_inference_settings_are_the_live_clients_own_constants(tmp_path, capsys):
+    assert run_evals.FIXED_INFERENCE["reasoning_effort"] is model_client.REASONING_EFFORT
+    assert run_evals.FIXED_INFERENCE["max_completion_tokens"] is model_client.MAX_COMPLETION_TOKENS
+    assert run_evals.FIXED_INFERENCE["runs_per_answer"] is pipeline.RUNS
+
+    _, report, markdown = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+    inference = report["inference"]
+    assert inference["reasoning_effort"] == model_client.REASONING_EFFORT
+    assert inference["max_completion_tokens"] == model_client.MAX_COMPLETION_TOKENS
+    assert inference["runs_per_answer"] == pipeline.RUNS
+    assert f"| `reasoning_effort` | {model_client.REASONING_EFFORT} |" in markdown
+    assert f"| `max_completion_tokens` | {model_client.MAX_COMPLETION_TOKENS} |" in markdown
+    assert f"| Runs per answer | {pipeline.RUNS} |" in markdown
+
+
+def test_the_runner_keeps_no_copy_of_the_client_settings():
+    # The report reads the constants: it has no copy of its own to drift from them.
+    source = Path(run_evals.__file__).read_text(encoding="utf-8")
+    assert '"reasoning_effort": REASONING_EFFORT' in source
+    assert '"max_completion_tokens": MAX_COMPLETION_TOKENS' in source
+    assert '"reasoning_effort": "' not in source and '"max_completion_tokens": 6' not in source
+
+
+# --------------------------------------------------------------------------- extra attempts
+RETRY_LINE = "Inputs tried again after a model failure or an unusable reply"
+BLOCKED_LINE = "Clean answers blocked by the platform guardrail"
+
+
+class RaisingClient:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def complete(self, messages, *, schema):
+        raise self._error
+
+
+def flaky(plan: dict[str, list[Exception]]):
+    """The passing client, except that a named input fails once for each error listed."""
+    remaining = {item_id: list(errors) for item_id, errors in plan.items()}
+
+    def client_for(item: EvalItem):
+        errors = remaining.get(item.item_id)
+        if errors:
+            return RaisingClient(errors.pop(0))
+        return passing_client(item)
+
+    return client_for
+
+
+def cut_off() -> ModelUnavailableError:
+    return ModelUnavailableError("the reply is not complete")
+
+
+def test_a_clean_run_shows_zero_extra_attempts_in_markdown_console_and_json(tmp_path, capsys):
+    _, report, markdown = run(tmp_path, "--fake", *FULL)
+    console = capsys.readouterr().out.splitlines()
+    summary = [line for line in extract_summary(markdown).splitlines() if line]
+
+    plain = f"{RETRY_LINE}: 0 attempt(s) on 0 input(s)"
+    bold = f"**{RETRY_LINE}:** 0 attempt(s) on 0 input(s)."
+    assert plain in console and bold in summary
+    # Next to the line about clean answers blocked by the platform guardrail.
+    assert console[console.index(plain) - 1].startswith(f"{BLOCKED_LINE}:")
+    assert summary[summary.index(bold) - 1].startswith(f"**{BLOCKED_LINE}:**")
+    assert report["run"]["retried_inputs"] == []
+    assert report["run"]["retries"] == {
+        "summary": plain,
+        "attempts": 0,
+        "inputs": 0,
+        "max_attempts_per_run": 3,
+        "by_cause": {},
+        "attempts_in_order": [],
+    }
+
+
+def test_extra_attempts_are_counted_in_markdown_console_and_json(tmp_path, capsys):
+    hidden = build_items(load_datasets(), ("golden",), "holdout")[0].item_id
+    plan = {
+        hidden: [cut_off(), ModelUnavailableError("the reply is not valid JSON")],
+        "f-id-01:b": [ModelUnavailableError("the call failed after one retry")],
+    }
+    code, report, markdown = run(tmp_path, *FULL, client_factory=flaky(plan))
+    out = capsys.readouterr().out
+
+    counts = "3 attempt(s) on 2 input(s)"
+    detail = f"{counts} (1 failed call, 2 unusable reply). No score was reused or invented"
+    assert f"{RETRY_LINE}: {detail}" in out.splitlines()
+    assert f"**{RETRY_LINE}:** {detail}." in extract_summary(markdown).splitlines()
+    retries = report["run"]["retries"]
+    assert retries["summary"] == f"{RETRY_LINE}: {counts}"
+    assert (retries["attempts"], retries["inputs"]) == (3, 2)
+    assert retries["by_cause"] == {"failed call": 1, "unusable reply": 2}
+    tried_again = sorted([hidden, hidden, "f-id-01:b"])
+    assert sorted(entry["item_id"] for entry in retries["attempts_in_order"]) == tried_again
+    causes = {(entry["item_id"], entry["cause"]) for entry in retries["attempts_in_order"]}
+    assert causes == {(hidden, "unusable reply"), ("f-id-01:b", "failed call")}
+    assert report["run"]["retried_inputs"] == tried_again
+    # The ids are in the JSON file only: one of them is a holdout row.
+    assert hidden not in markdown and hidden not in out
+    # Every input was scored in the end, and the gate result is the same as without them.
+    assert len(report["results"]) == 92
+    assert (code, report["gate"]["status"]) == (EXIT_PASS, "pass")
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [FULL, ["--suite", "golden", "--split", "dev", "--per-minute", "0"]],
+    ids=["full", "partial"],
+)
+def test_too_many_extra_attempts_stop_the_run_with_no_report(
+    arguments, tmp_path, capsys, monkeypatch
+):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    failing = [item.item_id for item in build_items(load_datasets(), ("golden",), "dev")[:4]]
+    plan = {item_id: [cut_off()] for item_id in failing}
+
+    code, report, _ = run(tmp_path, *arguments, client_factory=flaky(plan))
+    captured = capsys.readouterr()
+    assert (code, report) == (EXIT_ERROR, None)
+    assert not (tmp_path / "reports").exists() or not list((tmp_path / "reports").iterdir())
+    assert "the model failed or returned unusable replies too often" in captured.err
+    assert "at most 3 extra attempts, 3 were made (3 unusable reply)" in captured.err
+    assert "itself a finding" in captured.err
+    assert "No report was written and no score was invented" in captured.err
+    assert captured.out.rstrip().splitlines()[-1] == "GATE: NOT EVALUATED (the run did not finish)"
+    assert "GATE: PASS" not in captured.out
+    written = summary.read_text(encoding="utf-8")
+    assert "NOT EVALUATED" in written and "too often" in written
+    assert not any(item_id in captured.err + written for item_id in failing)
+
+
+def test_a_report_without_the_retry_keys_still_renders(tmp_path, capsys):
+    _, report, _ = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+
+    # A report from before the causes were kept: the ids only, one per extra attempt.
+    del report["run"]["retries"]
+    report["run"]["retried_inputs"] = ["e-a", "e-a", "e-b"]
+    counted = "3 attempt(s) on 2 input(s). No score was reused or invented"
+    assert f"**{RETRY_LINE}:** {counted}." in extract_summary(render_markdown(report))
+    assert f"{RETRY_LINE}: {counted}" in console_lines(report)
+
+    # A report from before the runner tried an input again: nothing is claimed.
+    del report["run"]["retried_inputs"]
+    assert f"**{RETRY_LINE}:** not recorded in this report." in render_markdown(report)
+    assert f"{RETRY_LINE}: not recorded in this report" in console_lines(report)
+
+
+# --------------------------------------------------------------------------- the defects line
+DEV_ROW, HOLDOUT_ROW, SECOND_HOLDOUT_ROW = "g-tw-3-a", "g-tw-5-a", "g-zz-9-z"
+HOLDOUT_IDS_NOTE = "holdout ids are in the JSON file only"
+
+
+def defect(row_id: str, split: str) -> dict:
+    return {
+        "kind": "defect",
+        "rule": "golden_far_from_label",
+        "suite": "golden",
+        "row_id": row_id,
+        "split": split,
+        "detail": "label 3, score 5",
+    }
+
+
+@pytest.mark.parametrize(
+    ("misses", "expected"),
+    [
+        ([], "0"),
+        ([defect(DEV_ROW, "dev")], "1: `g-tw-3-a` (golden_far_from_label)"),
+        ([defect(HOLDOUT_ROW, "holdout")], f"1 (1 on a holdout row; {HOLDOUT_IDS_NOTE})"),
+        (
+            [defect(DEV_ROW, "dev"), defect(HOLDOUT_ROW, "holdout")],
+            f"2 (1 named here, 1 on a holdout row; {HOLDOUT_IDS_NOTE}): "
+            "`g-tw-3-a` (golden_far_from_label)",
+        ),
+        (
+            [
+                defect(HOLDOUT_ROW, "holdout"),
+                defect(DEV_ROW, "dev"),
+                defect(SECOND_HOLDOUT_ROW, "holdout"),
+            ],
+            f"3 (1 named here, 2 on holdout rows; {HOLDOUT_IDS_NOTE}): "
+            "`g-tw-3-a` (golden_far_from_label)",
+        ),
+    ],
+    ids=["none", "one dev", "one holdout", "one of each", "one dev and two holdout"],
+)
+def test_the_defects_line_counts_every_defect_once(misses, expected, tmp_path, capsys):
+    _, report, _ = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+    report["misses"] = misses
+
+    summary = extract_summary(render_markdown(report)).splitlines()
+    console = console_lines(report)
+    assert f"**Defects:** {expected}." in summary
+    assert "Defects: " + expected.replace("`", "") in console
+    # The first number is the total, so nothing may be added to it afterwards.
+    assert not any("plus" in line for line in summary + console if "Defects:" in line)
+    # A holdout row is counted and never named, in the Markdown or on the console.
+    printed = render_markdown(report) + "\n".join(console)
+    assert HOLDOUT_ROW not in printed and SECOND_HOLDOUT_ROW not in printed
+
+
+def test_the_blocked_line_counts_every_blocked_answer_once(tmp_path, capsys):
+    _, report, _ = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+    report["blocked_clean_answers"] = [
+        {"item_id": HOLDOUT_ROW, "suite": "golden", "split": "holdout"}
+    ]
+    assert (
+        f"**{BLOCKED_LINE}:** 1 (1 on a holdout row; {HOLDOUT_IDS_NOTE})."
+        in render_markdown(report).splitlines()
+    )
+    report["blocked_clean_answers"].append({"item_id": DEV_ROW, "suite": "golden", "split": "dev"})
+    markdown = render_markdown(report)
+    assert (
+        f"**{BLOCKED_LINE}:** 2 (1 named here, 1 on a holdout row; {HOLDOUT_IDS_NOTE}): "
+        "`g-tw-3-a`." in markdown.splitlines()
+    )
+    assert HOLDOUT_ROW not in markdown

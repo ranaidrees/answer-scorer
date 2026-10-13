@@ -10,7 +10,13 @@ import pytest
 import yaml
 
 from scorer.config import PromptError, load_prompt, load_registry, prompt_sha256
-from tests.unit.samples import REPO_ROOT, TEAMWORK_ANSWER, make_settings, run_score
+from tests.unit.samples import (
+    ACTIVE_PROMPT_VERSION,
+    REPO_ROOT,
+    TEAMWORK_ANSWER,
+    make_settings,
+    run_score,
+)
 
 PROMPTS = REPO_ROOT / "prompts" / "scorer"
 
@@ -43,9 +49,9 @@ def test_fr3_every_prompt_file_matches_its_registry_hash(settings):
 
 def test_fr3_changing_a_prompt_file_without_changing_its_version_fails(scorer_root):
     settings = make_settings(scorer_root)
-    assert load_prompt(settings).version == "v1"
+    assert load_prompt(settings).version == ACTIVE_PROMPT_VERSION
 
-    path = scorer_root / "prompts" / "scorer" / "v1.md"
+    path = scorer_root / "prompts" / "scorer" / f"{ACTIVE_PROMPT_VERSION}.md"
     path.write_text(path.read_text(encoding="utf-8") + "\nBe generous.\n", encoding="utf-8")
 
     with pytest.raises(PromptError, match="registry hash"):
@@ -55,8 +61,9 @@ def test_fr3_changing_a_prompt_file_without_changing_its_version_fails(scorer_ro
 def test_fr3_a_tampered_prompt_stops_scoring_before_any_model_call(scorer_root):
     from tests.unit.samples import good_client
 
-    path = scorer_root / "prompts" / "scorer" / "v1.md"
-    path.write_text(path.read_text(encoding="utf-8").replace("word for word", "roughly"), "utf-8")
+    path = scorer_root / "prompts" / "scorer" / f"{ACTIVE_PROMPT_VERSION}.md"
+    # A change of wording that does not depend on what the active prompt says.
+    path.write_text(path.read_text(encoding="utf-8") + "\nQuote roughly.\n", encoding="utf-8")
     client = good_client()
 
     with pytest.raises(PromptError):
@@ -95,7 +102,7 @@ def test_fr3_the_override_is_read_from_the_environment(scorer_root, monkeypatch)
     monkeypatch.setenv("SCORER_ROOT", str(scorer_root))
 
     monkeypatch.delenv("SCORER_PROMPT_VERSION", raising=False)
-    assert load_prompt(Settings()).version == "v1"
+    assert load_prompt(Settings()).version == ACTIVE_PROMPT_VERSION
 
     monkeypatch.setenv("SCORER_PROMPT_VERSION", "v2")
     assert load_prompt(Settings()).version == "v2"
@@ -131,20 +138,32 @@ def test_fr3_a_broken_or_missing_registry_fails(scorer_root, content):
         load_prompt(make_settings(scorer_root))
 
 
-def test_fr3_committed_registry_has_v1_active():
+def test_fr3_committed_registry_activates_a_registered_prompt_and_registers_every_file():
+    """No prompt can be active, or even present, without a registered SHA-256."""
     registry = yaml.safe_load((PROMPTS / "registry.yaml").read_text(encoding="utf-8"))
-    assert registry["active"] == "v1"
-    assert re.fullmatch(r"[0-9a-f]{64}", registry["sha256"]["v1"])
+    active, hashes = registry["active"], registry["sha256"]
+    files = {path.stem: path for path in PROMPTS.glob("*.md")}
+
+    assert isinstance(active, str) and active
+    assert active in files, "the active version has a prompt file"
+    assert active in hashes, "the active version has a registry entry"
+    assert re.fullmatch(r"[0-9a-f]{64}", hashes[active])
+
+    for version, path in files.items():
+        assert version in hashes, f"prompts/scorer/{version}.md has no registry entry"
+        assert re.fullmatch(r"[0-9a-f]{64}", hashes[version]), version
+        actual = prompt_sha256(path.read_text(encoding="utf-8"))
+        assert actual == hashes[version], f"prompts/scorer/{version}.md does not match its hash"
 
 
 def test_fr3_prompt_version_and_hash_are_logged_on_every_call_without_candidate_text(caplog):
     with caplog.at_level(logging.INFO, logger="scorer"):
         outcome = run_score()
 
-    assert outcome.response.prompt_version == "v1"
+    assert outcome.response.prompt_version == ACTIVE_PROMPT_VERSION
     assert outcome.prompt_sha == load_prompt(make_settings()).sha256
     logged = "\n".join(record.getMessage() for record in caplog.records)
-    assert "prompt_version=v1" in logged
+    assert f"prompt_version={ACTIVE_PROMPT_VERSION}" in logged
     assert f"prompt_sha={outcome.prompt_sha}" in logged
     assert outcome.answer_hash in logged
     assert outcome.response.request_id in logged

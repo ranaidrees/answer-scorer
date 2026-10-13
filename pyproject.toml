@@ -68,6 +68,9 @@ cmd = "pytest"
 [tool.poe.tasks.eval]
 help = "Run the eval suite and the gate against the live model deployment. Add --fake for an offline dry run, or --suite and --split for a partial run."
 cmd = "python -m evals.run_evals"
+# Local runs read the endpoint and deployment from the git-ignored file; CI has no such
+# file (poe warns and carries on) and passes the same names through the job environment.
+envfile = ".env.local"
 
 [tool.poe.tasks.run]
 help = "Run the API and demo page on http://localhost:8000, with settings from .env.local."
@@ -77,6 +80,11 @@ envfile = ".env.local"
 [tool.poe.tasks.smoke]
 help = "Start the app locally, score a strong, a weak and an injection answer, then stop it."
 cmd = "python scripts/smoke.py --local"
+envfile = ".env.local"
+
+[tool.poe.tasks.traffic]
+help = "Send demo traffic to the locally running app (start it with 'poe run' first). Add --profile normal or --profile injection-burst."
+cmd = "python scripts/traffic.py"
 envfile = ".env.local"
 
 [tool.poe.tasks.smoke-remote]

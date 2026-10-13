@@ -14,8 +14,12 @@ repository root, adding a generated demo token and answer-hash salt. A token or 
 already in the file is kept, so running it twice is safe.
 
 `--push` reads `.env.local` and sets the Container App secrets and their `secretref`
-variables, the GitHub repository secret, the `demo` environment secret and the GitHub
+variables, the GitHub repository secrets, the `demo` environment secret and the GitHub
 repository variables. Values travel as subprocess arguments or on stdin, never to stdout.
+
+The tenant, subscription and client IDs and the Foundry endpoint are GitHub secrets, not
+variables: GitHub prints a variable in the public log of every job that uses it, and
+masks a secret. `--push` also deletes any variable left over under one of those names.
 
 Standard library only.
 """
@@ -54,13 +58,24 @@ AZD_KEYS = (
 GENERATED_KEYS = ("DEMO_TOKEN", "ANSWER_HASH_SALT")
 # Container App secret name for each generated key.
 APP_SECRETS = {"DEMO_TOKEN": "demo-token", "ANSWER_HASH_SALT": "answer-hash-salt"}
-# GitHub repository variables copied straight from .env.local.
+# GitHub repository variables copied straight from .env.local: fixed names that identify
+# nothing. A variable is printed in the public log of every job that uses it.
 VARIABLES_FROM_FILE = (
     "AZURE_RESOURCE_GROUP",
     "CONTAINER_APP_NAME",
-    "FOUNDRY_ENDPOINT",
     "MODEL_DEPLOYMENT",
     "MODEL_VERSION",
+)
+# GitHub repository secrets copied straight from .env.local.
+SECRETS_FROM_FILE = ("APPLICATIONINSIGHTS_CONNECTION_STRING", "FOUNDRY_ENDPOINT")
+# Identifiers that are GitHub repository secrets and must never be variables. The IDs
+# are read from Azure at push time and are stored in no file.
+IDENTIFYING_SECRETS = (
+    "AZURE_TENANT_ID",
+    "AZURE_SUBSCRIPTION_ID",
+    "AZURE_CLIENT_ID_DEPLOY",
+    "AZURE_CLIENT_ID_EVAL",
+    "FOUNDRY_ENDPOINT",
 )
 
 # Shapes that are masked in a tool's message even when the value is not known yet.
@@ -190,8 +205,8 @@ def write() -> list[str]:
     return list(merged)
 
 
-def push(done: list[str], skipped: list[str]) -> None:
-    """Push values to Azure and GitHub, recording by name what was set and what was skipped.
+def push(done: list[str], skipped: list[str], removed: list[str]) -> None:
+    """Push values to Azure and GitHub, recording by name what was set, skipped and removed.
 
     The lists are filled as it goes, so a failure part-way still reports the steps before it.
     """
@@ -211,14 +226,16 @@ def push(done: list[str], skipped: list[str]) -> None:
     # nothing is changed if the sign-in is wrong. They are never stored in a file.
     account = json.loads(run("az account show", AZ_ACCOUNT_SHOW, hidden))
     hidden += [account["tenantId"], account["id"], (account.get("user") or {}).get("name", "")]
-    variables = {"AZURE_TENANT_ID": account["tenantId"], "AZURE_SUBSCRIPTION_ID": account["id"]}
+    github_secrets = {key: values[key] for key in SECRETS_FROM_FILE}
+    github_secrets["AZURE_TENANT_ID"] = account["tenantId"]
+    github_secrets["AZURE_SUBSCRIPTION_ID"] = account["id"]
     for key, identity in (
         ("AZURE_CLIENT_ID_DEPLOY", DEPLOY_IDENTITY),
         ("AZURE_CLIENT_ID_EVAL", EVAL_IDENTITY),
     ):
-        variables[key] = identity_client_id(group, identity, hidden)
-        hidden.append(variables[key])
-    variables.update({key: values[key] for key in VARIABLES_FROM_FILE})
+        github_secrets[key] = identity_client_id(group, identity, hidden)
+        hidden.append(github_secrets[key])
+    variables = {key: values[key] for key in VARIABLES_FROM_FILE}
 
     # Container App: the secrets first, then the variables that point at them.
     pairs = [f"{name}={values[key]}" for key, name in APP_SECRETS.items()]
@@ -238,10 +255,14 @@ def push(done: list[str], skipped: list[str]) -> None:
     )
     done += [f"Container App variable {key} (secretref)" for key in APP_SECRETS]
 
-    # GitHub secrets, passed on stdin.
-    name = "APPLICATIONINSIGHTS_CONNECTION_STRING"
-    run(f"GitHub secret {name}", ["gh", "secret", "set", name], hidden, stdin=values[name])
-    done.append(f"GitHub repository secret {name}")
+    # GitHub secrets, passed on stdin: the connection string, the endpoint and the IDs.
+    for name, value in github_secrets.items():
+        run(f"GitHub secret {name}", ["gh", "secret", "set", name], hidden, stdin=value)
+        done.append(f"GitHub repository secret {name}")
+    # A variable left under one of those names would still be printed in public logs.
+    for name in IDENTIFYING_SECRETS:
+        if delete_variable(name, hidden):
+            removed.append(f"GitHub repository variable {name} (it is a secret now)")
     label = f"GitHub environment secret DEMO_TOKEN ({GITHUB_ENVIRONMENT})"
     if environment_exists(hidden):
         run(
@@ -255,10 +276,21 @@ def push(done: list[str], skipped: list[str]) -> None:
         # The lead creates the environment; until then this one step is skipped.
         skipped.append(f"{label}: the environment does not exist yet")
 
-    # GitHub variables, passed on stdin.
+    # GitHub variables, passed on stdin. None of them identifies anything.
     for key, value in variables.items():
         run(f"GitHub variable {key}", ["gh", "variable", "set", key], hidden, stdin=value)
         done.append(f"GitHub repository variable {key}")
+
+
+def delete_variable(name: str, hidden: list[str]) -> bool:
+    """Delete a GitHub repository variable. False if it was not there; any other failure raises."""
+    try:
+        run(f"GitHub variable {name} removal", ["gh", "variable", "delete", name], hidden)
+    except SetupError as error:
+        if "HTTP 404" in error.detail:
+            return False
+        raise
+    return True
 
 
 def environment_exists(hidden: list[str]) -> bool:
@@ -295,13 +327,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     done: list[str] = []
     skipped: list[str] = []
+    removed: list[str] = []
     status = 0
     try:
         if args.write:
             names = write()
             print(f"Wrote {ENV_FILE_NAME} with keys: {', '.join(names)}")
         else:
-            push(done, skipped)
+            push(done, skipped, removed)
     except SetupError as error:
         print(f"error: {error}", file=sys.stderr)
         if error.detail and args.debug:
@@ -311,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
         status = 1
     for item in done:
         print(f"set: {item}")
+    for item in removed:
+        print(f"removed: {item}")
     for item in skipped:
         print(f"skipped: {item}")
     return status

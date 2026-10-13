@@ -118,22 +118,24 @@ def test_step_order(steps):
     ]
 
 
-def test_sign_in_is_oidc_with_ids_from_repository_variables(steps):
+def test_sign_in_is_oidc_with_ids_from_repository_secrets(steps):
+    # Secrets, not variables: the inputs of an action are printed in the public job log,
+    # and only a secret is masked there.
     login = step(steps, "Sign in to Azure")
     assert login["with"] == {
-        "client-id": "${{ vars.AZURE_CLIENT_ID_EVAL }}",
-        "tenant-id": "${{ vars.AZURE_TENANT_ID }}",
-        "subscription-id": "${{ vars.AZURE_SUBSCRIPTION_ID }}",
+        "client-id": "${{ secrets.AZURE_CLIENT_ID_EVAL }}",
+        "tenant-id": "${{ secrets.AZURE_TENANT_ID }}",
+        "subscription-id": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
     }
 
 
-def test_the_evals_run_in_full_with_the_event_and_settings_from_variables(steps):
+def test_the_evals_run_in_full_with_the_event_and_settings_from_the_repository(steps):
     assert step(steps, "Install dependencies")["run"] == "uv sync --locked"
     run = step(steps, "Run the evals")
     assert run["run"] == "uv run poe eval --emit-event"  # no --fake, --suite or --split
     assert "continue-on-error" not in run  # the gate fails the job
     env = run["env"]
-    assert env["FOUNDRY_ENDPOINT"] == "${{ vars.FOUNDRY_ENDPOINT }}"
+    assert env["FOUNDRY_ENDPOINT"] == "${{ secrets.FOUNDRY_ENDPOINT }}"
     assert env["MODEL_DEPLOYMENT"] == "${{ vars.MODEL_DEPLOYMENT }}"
     assert env["MODEL_VERSION"] == "${{ vars.MODEL_VERSION }}"
     assert env["APPLICATIONINSIGHTS_CONNECTION_STRING"] == (
@@ -142,16 +144,16 @@ def test_the_evals_run_in_full_with_the_event_and_settings_from_variables(steps)
     assert "${{" not in env["ANSWER_HASH_SALT"]  # fixed and not a secret
 
 
-def test_only_the_connection_string_is_a_secret_and_nothing_is_hard_coded(text):
-    assert re.findall(r"secrets\.(\w+)", text) == ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
-    assert set(re.findall(r"vars\.(\w+)", text)) == {
+def test_everything_that_identifies_the_account_is_a_secret_and_nothing_is_hard_coded(text):
+    assert set(re.findall(r"secrets\.(\w+)", text)) == {
+        "APPLICATIONINSIGHTS_CONNECTION_STRING",
         "AZURE_CLIENT_ID_EVAL",
         "AZURE_TENANT_ID",
         "AZURE_SUBSCRIPTION_ID",
         "FOUNDRY_ENDPOINT",
-        "MODEL_DEPLOYMENT",
-        "MODEL_VERSION",
     }
+    # Only fixed names that identify nothing are variables.
+    assert set(re.findall(r"vars\.(\w+)", text)) == {"MODEL_DEPLOYMENT", "MODEL_VERSION"}
     # No id, endpoint or connection string written into the file.
     assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text)
     assert "InstrumentationKey" not in text
