@@ -13,7 +13,8 @@ concurrency:
 jobs:
   claude-review:
     # Dependabot pull requests receive no secrets, so the review cannot run on them.
-    if: github.actor != 'dependabot[bot]'
+    # Fork pull requests receive no secrets either, so the job skips for them instead of failing.
+    if: github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -15,7 +15,7 @@ levels:
     label: Limited
     descriptors:
       - Does not answer the question, or gives only general statements or a list of qualities with no specific situation.
-      - Describes only what other people did or failed to do, with no action of their own.
+      - Describes only what other people did or did not do, with no action of their own.
   - level: 2
     label: Developing
     descriptors:
