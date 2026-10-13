@@ -1,0 +1,232 @@
+// Queries for the answer scorer dashboard and its alert rules (spec section 8).
+//
+// Each query starts with a "// name:" line. The workbook (infra/workbook.json) and the
+// alert rules (infra/observability.bicep) hold the same text, and a unit test keeps the
+// three in step, so this file is the place to read and change a query.
+//
+// Where they run: Application Insights (tables requests, dependencies, customEvents).
+// None of them filters on time. The time range comes from the caller: the workbook's
+// time-range parameter, the alert rule's window, or --offset on the command line:
+//
+//   az monitor app-insights query --app <name> --resource-group <group> --offset 24h
+//     --analytics-query "<one query from this file>"
+//
+// What the data looks like (decisions S3-3, S3-6 and S4b-9):
+//   - A scored request is a `score` span, stored in `dependencies`, that carries
+//     `scorer.request_id`. A request that reached the pipeline but was not scored leaves
+//     a `score` span with no attributes, so every query on scores checks that attribute.
+//   - Every attribute arrives as text. `scorer.review_reasons` is comma-separated and is
+//     empty when nothing sent the answer to a person.
+//   - Properties of the `eval_run` event arrive as text too, so numbers need todouble().
+//   - The request named "POST /api/score" in `requests` is the whole HTTP call, with its
+//     status code and its duration in milliseconds. Health probes are not recorded.
+//
+// No query reads or returns candidate text: telemetry holds none.
+
+// name: tile1_requests_latency
+// Tile 1, table. Requests to POST /api/score over the time range: how many, how many
+// failed, and the p50 and p95 latency of the completed ones against the 6 s SLO.
+// A 4xx (wrong token, rate limit, input that cannot be scored) is the caller's side and
+// is left out of the failure rate and of availability. A failure is a 5xx. Latency is
+// measured on completed requests (status 200) only, because a refused request takes a
+// few milliseconds and would pull the percentiles down.
+requests
+| where name == "POST /api/score"
+| extend status = toint(resultCode)
+| summarize
+    requests = count(),
+    completed_200 = countif(status == 200),
+    client_errors_4xx = countif(status >= 400 and status < 500),
+    counted_non_4xx = countif(status < 400 or status >= 500),
+    failures_5xx = countif(status >= 500),
+    p50_ms = percentile(iff(status == 200, duration, real(null)), 50),
+    p95_ms = percentile(iff(status == 200, duration, real(null)), 95)
+| where requests > 0
+| extend
+    failure_rate_pct = iff(counted_non_4xx == 0, real(null), round(100.0 * failures_5xx / counted_non_4xx, 2)),
+    p50_s = round(p50_ms / 1000.0, 2),
+    p95_s = round(p95_ms / 1000.0, 2)
+| extend availability_pct = 100.0 - failure_rate_pct
+| project
+    requests,
+    completed_200,
+    client_errors_4xx,
+    failures_5xx,
+    failure_rate_pct,
+    availability_pct,
+    availability_slo = case(isnull(availability_pct), "no data", availability_pct >= 99.0, "met (99% or more)", "missed (under 99%)"),
+    p50_s,
+    p95_s,
+    slo_p95_s = 6.0,
+    latency_slo = case(isnull(p95_s), "no data", p95_s <= 6.0, "met (6 s or less)", "missed (over 6 s)")
+
+// name: tile1_latency_over_time
+// Tile 1, time chart. p50 and p95 latency of completed requests in 5-minute bins, with
+// the 6 s SLO as a flat line to read them against.
+requests
+| where name == "POST /api/score" and toint(resultCode) == 200
+| summarize
+    p50_s = round(percentile(duration, 50) / 1000.0, 2),
+    p95_s = round(percentile(duration, 95) / 1000.0, 2)
+    by bin(timestamp, 5m)
+| extend slo_p95_s = 6.0
+| project timestamp, p50_s, p95_s, slo_p95_s
+| order by timestamp asc
+
+// name: tile2_review_rate_by_reason
+// Tile 2, table. The online evaluation view: of the scored requests in the time range,
+// how many were sent to a person, by reason. One answer can have several reasons, so the
+// rows do not add up to the total. The control-triggered rate counts an answer once when
+// it has any reason other than the adverse-score rule alone, and is the figure read
+// against the 25% band for live traffic. The 15% gate in CI is a different measure, on
+// the golden set (docs/slo.md).
+let scored = dependencies
+    | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+    | extend reasons_text = tostring(customDimensions["scorer.review_reasons"])
+    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, ","))
+    | extend
+        needs_review = tolower(tostring(customDimensions["scorer.needs_human_review"])) == "true",
+        control_triggered = array_length(set_difference(reason_list, dynamic(["adverse_score"]))) > 0;
+let total = toscalar(scored | count);
+let known_reasons = datatable(row_order: int, reason: string) [
+    1, "injection_detected",
+    2, "hidden_text_removed",
+    3, "platform_guardrail",
+    4, "ungrounded_quote",
+    5, "inconsistent",
+    6, "off_topic",
+    7, "rationale_protected_term",
+    8, "adverse_score"
+];
+let by_reason = scored
+    | mv-expand reason = reason_list to typeof(string)
+    | summarize reviews = count() by reason;
+let reason_rows = known_reasons
+    | join kind=fullouter by_reason on reason
+    | project
+        row_order = toint(coalesce(row_order, int(9))),
+        measure = coalesce(reason, reason1),
+        reviews = tolong(coalesce(reviews, long(0)));
+let summary_rows = scored
+    | summarize control = countif(control_triggered), any_reason = countif(needs_review)
+    | extend rows = pack_array(
+        pack("row_order", 10, "measure", "control-triggered (any reason other than adverse_score alone)", "reviews", control),
+        pack("row_order", 11, "measure", "any review", "reviews", any_reason))
+    | mv-expand rows
+    | project
+        row_order = toint(rows.row_order),
+        measure = tostring(rows.measure),
+        reviews = tolong(rows.reviews);
+union reason_rows, summary_rows
+| where total > 0
+| extend scored_requests = total
+| extend rate_pct = round(100.0 * reviews / scored_requests, 1)
+| extend band = case(
+    row_order != 10, "",
+    rate_pct <= 25.0, "inside the 25% band",
+    "over the 25% band")
+| order by row_order asc
+| project measure, reviews, scored_requests, rate_pct, band
+
+// name: tile2_review_rate_over_time
+// Tile 2, time chart. The same rates in 5-minute bins, one series per reason, with the
+// control-triggered rate and the 25% band as a flat line. A bin with few requests gives
+// a jumpy rate; the table above is the figure for the whole time range.
+let scored = dependencies
+    | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+    | extend reasons_text = tostring(customDimensions["scorer.review_reasons"])
+    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, ","))
+    | extend control_triggered = array_length(set_difference(reason_list, dynamic(["adverse_score"]))) > 0;
+let totals = scored
+    | summarize scored_requests = count() by bin(timestamp, 5m);
+let by_reason = scored
+    | mv-expand reason = reason_list to typeof(string)
+    | summarize reviews = count() by bin(timestamp, 5m), series = reason;
+let control = scored
+    | summarize reviews = countif(control_triggered) by bin(timestamp, 5m)
+    | extend series = "control-triggered";
+let band = totals
+    | project timestamp, series = "25% band", rate_pct = 25.0;
+union by_reason, control
+| join kind=inner totals on timestamp
+| project timestamp, series, rate_pct = round(100.0 * reviews / scored_requests, 1)
+| union band
+| order by timestamp asc, series asc
+
+// name: tile3_tokens_cost
+// Tile 3, table. Tokens and estimated cost per score, by competency and for all scores.
+// One score is three model calls, and the token counts are the sum of the three. The cost
+// is an estimate: tokens multiplied by the prices in config/prices.yaml, with every input
+// token at the full input price. It is never the invoice.
+let scored = dependencies
+    | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+    | extend
+        competency = tostring(customDimensions["scorer.competency"]),
+        tokens_in = tolong(customDimensions["scorer.tokens_in"]),
+        tokens_out = tolong(customDimensions["scorer.tokens_out"]),
+        cost_gbp = todouble(customDimensions["scorer.cost_estimate_gbp"]);
+union
+    (scored | extend row_order = 1),
+    (scored | extend row_order = 2, competency = "all")
+| summarize
+    scores = count(),
+    tokens_in_per_score = round(avg(tokens_in)),
+    tokens_out_per_score = round(avg(tokens_out)),
+    estimated_cost_per_score_gbp = round(avg(cost_gbp), 5),
+    tokens_in_total = sum(tokens_in),
+    tokens_out_total = sum(tokens_out),
+    estimated_cost_total_gbp = round(sum(cost_gbp), 4)
+    by row_order, competency
+| order by row_order asc, competency asc
+| project-away row_order
+
+// name: tile4_eval_runs
+// Tile 4, table. One row per full eval run against the live model, newest first, from the
+// `eval_run` events that CI sends: what started the run, quadratic weighted kappa and
+// agreement on the golden set, the control-triggered review rate on the golden set (the
+// CI gate is 15%), and whether the gate passed. `run_type` splits pull request runs from
+// nightly and manual ones; a run started outside GitHub Actions shows as "local".
+customEvents
+| where name == "eval_run"
+| extend trigger_name = tostring(customDimensions["trigger"])
+| project
+    timestamp,
+    run_type = case(
+        trigger_name == "pull_request", "pull request",
+        trigger_name == "schedule", "nightly",
+        trigger_name == "workflow_dispatch", "manual",
+        trigger_name),
+    gate = iff(tolower(tostring(customDimensions["passed"])) == "true", "PASS", "FAIL"),
+    qwk = round(todouble(customDimensions["golden_qwk"]), 3),
+    exact_agreement = round(todouble(customDimensions["golden_exact"]), 3),
+    within_1_agreement = round(todouble(customDimensions["golden_within_1"]), 3),
+    golden_control_review_rate = round(todouble(customDimensions["golden_control_review_rate"]), 3),
+    breached = tostring(customDimensions["breached"]),
+    prompt_version = tostring(customDimensions["prompt_version"]),
+    git_sha = substring(tostring(customDimensions["git_sha"]), 0, 7),
+    model_calls = tolong(customDimensions["model_calls"])
+| order by timestamp desc
+
+// name: alert_latency_p95
+// Alert "p95 latency over 6 s". The rule runs this over a 15-minute window and fires
+// when it returns a row. It returns a row only when the p95 of completed requests in the
+// window is over 6 s. No requests means no row, so the rule cannot fire on no data. Fewer
+// than five completed requests also means no row: the first request after the app has
+// scaled to zero is slow by design, and one request is not a percentile.
+requests
+| where name == "POST /api/score" and toint(resultCode) == 200
+| summarize completed_requests = count(), p95_ms = percentile(duration, 95)
+| where completed_requests >= 5 and p95_ms > 6000
+
+// name: alert_availability
+// Alert "availability under 99%". The rule runs this over a 1-hour window and fires when
+// it returns a row. It returns a row only when fewer than 99% of the non-4xx requests in
+// the window succeeded. No requests means no row, so the rule cannot fire on no data.
+requests
+| where name == "POST /api/score"
+| extend status = toint(resultCode)
+| where status < 400 or status >= 500
+| summarize counted_requests = count(), failures_5xx = countif(status >= 500)
+| where counted_requests > 0
+| extend availability_pct = round(100.0 * (counted_requests - failures_5xx) / counted_requests, 2)
+| where availability_pct < 99.0
