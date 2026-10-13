@@ -24,6 +24,7 @@ from scorer.api import MAX_BODY_BYTES, RateLimiter, client_address, create_app, 
 from scorer.model_client import FakeModelClient, ModelUnavailableError
 from scorer.schemas import NOTICE
 from tests.unit.samples import (
+    ACTIVE_PROMPT_VERSION,
     EXACT_QUOTE,
     QUESTION,
     REPO_ROOT,
@@ -111,7 +112,8 @@ def test_fr1_a_valid_request_returns_the_score_with_a_trace_id_and_the_notice():
     assert payload["runs"] == [4, 4, 4] and payload["spread"] == 0
     assert payload["evidence"] == [{"quote": EXACT_QUOTE, "grounded": True}]
     assert payload["notice"] == NOTICE
-    assert payload["prompt_version"] == "v1" and payload["model_deployment"] == "scorer-mini"
+    assert payload["prompt_version"] == ACTIVE_PROMPT_VERSION
+    assert payload["model_deployment"] == "scorer-mini"
     trace_id = payload["trace_id"]
     assert len(trace_id) == 32 and int(trace_id, 16) != 0
     assert response.headers["cache-control"] == "no-store"
@@ -531,7 +533,7 @@ def test_the_score_span_carries_exactly_the_fixed_attribute_names():
     assert set(attributes) == FIXED_SPAN_ATTRIBUTES
     assert attributes["scorer.request_id"] == payload["request_id"]
     assert attributes["scorer.competency"] == "teamwork"
-    assert attributes["scorer.prompt_version"] == "v1"
+    assert attributes["scorer.prompt_version"] == ACTIVE_PROMPT_VERSION
     assert len(attributes["scorer.prompt_sha"]) == 64
     assert len(attributes["scorer.answer_hash"]) == 64
     assert attributes["scorer.model_deployment"] == "scorer-mini"
@@ -632,7 +634,7 @@ def test_fr10_readyz_is_503_when_a_rubric_the_prompt_or_the_prices_do_not_load(s
     assert client.get("/readyz").json()["problems"] == ["prices"]
 
     (scorer_root / "rubrics" / "teamwork.yaml").write_text("id: teamwork\n", encoding="utf-8")
-    prompt = scorer_root / "prompts" / "scorer" / "v1.md"
+    prompt = scorer_root / "prompts" / "scorer" / f"{ACTIVE_PROMPT_VERSION}.md"
     prompt.write_text(prompt.read_text(encoding="utf-8") + "\nchanged", encoding="utf-8")
 
     response = client.get("/readyz")

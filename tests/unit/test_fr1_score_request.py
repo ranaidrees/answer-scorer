@@ -17,6 +17,7 @@ from scorer.model_client import FakeModelClient, ModelUnavailableError
 from scorer.pipeline import GUARDRAIL_RATIONALE, MAX_QUESTION_CHARS, ScoringError
 from scorer.schemas import NOTICE, ScoreRequest
 from tests.unit.samples import (
+    ACTIVE_PROMPT_VERSION,
     EXACT_QUOTE,
     REPO_ROOT,
     TEAMWORK_ANSWER,
@@ -56,7 +57,7 @@ def test_fr1_response_carries_every_field_of_the_contract():
     assert body["runs"] == [4, 4, 4]
     assert body["spread"] == 0
     assert body["evidence"] == [{"quote": EXACT_QUOTE, "grounded": True}]
-    assert body["prompt_version"] == "v1"
+    assert body["prompt_version"] == ACTIVE_PROMPT_VERSION
     assert body["model_deployment"] == "scorer-mini"
     assert body["notice"] == NOTICE == "Decision support only. A trained person makes the decision."
     assert len(body["request_id"]) == 36

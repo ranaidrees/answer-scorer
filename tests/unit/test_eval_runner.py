@@ -45,6 +45,7 @@ from scorer.sanitise import sanitise
 
 # The real allow-list, bound here before any test swaps the module for a stand-in.
 from scorer.telemetry import CUSTOM_EVENT_NAMES, safe_event_attributes
+from tests.unit.samples import ACTIVE_PROMPT_VERSION
 
 FULL = ["--seed", "11", "--per-minute", "0"]
 
@@ -363,7 +364,8 @@ def test_report_follows_the_reporting_rules(tmp_path, capsys):
     assert inference["runs_per_answer"] == 3
     assert inference["reasoning_effort"] == "none"
     assert inference["max_completion_tokens"] == 600
-    assert (inference["model_deployment"], inference["prompt_version"]) == ("scorer-mini", "v1")
+    assert inference["model_deployment"] == "scorer-mini"
+    assert inference["prompt_version"] == ACTIVE_PROMPT_VERSION
     assert len(inference["prompt_sha256"]) == 64
     for text in (
         "`reasoning_effort`",
@@ -510,7 +512,7 @@ def test_one_eval_run_event_is_sent_after_a_full_live_run(tmp_path, capsys, tele
     assert attributes == eval_event_attributes(report)
     assert (attributes["git_sha"], attributes["trigger"]) == ("b" * 40, "schedule")
     assert (attributes["prompt_version"], attributes["gate"], attributes["passed"]) == (
-        "v1",
+        ACTIVE_PROMPT_VERSION,
         "pass",
         True,
     )

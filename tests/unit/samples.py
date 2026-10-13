@@ -5,12 +5,30 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import yaml
+
 from scorer.config import Settings
 from scorer.model_client import FakeModelClient
 from scorer.pipeline import ScoreOutcome, score_answer
 from scorer.schemas import ScoreRequest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def active_prompt_version(root: Path = REPO_ROOT) -> str:
+    """The prompt version the committed registry names as active.
+
+    Read straight from the registry file, not through the scorer, so that a test which
+    expects "the active prompt version" compares against the file and not against the code
+    under test.
+    """
+    path = root / "prompts" / "scorer" / "registry.yaml"
+    active = yaml.safe_load(path.read_text(encoding="utf-8"))["active"]
+    assert isinstance(active, str) and active, "the registry names an active prompt version"
+    return active
+
+
+ACTIVE_PROMPT_VERSION = active_prompt_version()
 
 QUESTION = "Tell me about a time you resolved a conflict in a team."
 
