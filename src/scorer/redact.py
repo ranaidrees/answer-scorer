@@ -19,25 +19,30 @@ _TRAILING_PUNCTUATION = ".,;:!?)]}'\""
 
 _URL_WITH_SCHEME = re.compile(r"(?:\b(?:https?|ftp)://|\bwww\.)[^\s<>\[\]\"']+", re.IGNORECASE)
 # The lookbehind lets a match start only at the start of a run, which keeps it linear.
-_EMAIL = re.compile(
-    r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+",
-    re.IGNORECASE,
-)
+# Letters of any script are allowed, so an address with an accented letter goes whole.
+_EMAIL = re.compile(r"(?<![\w.%+-])[\w.%+-]+@[\w-]+(?:\.[\w-]+)+")
 # A bare domain such as "example.com/profile". The ending list is short on purpose, so a
-# missing space after a full stop ("done.Then") is not read as a web address.
+# missing space after a full stop ("done.Then") is not read as a web address. An ending
+# that is also part of a product name ("asp.net") needs a path or a third label.
+_PATH = r"/[^\s<>\[\]\"']*"
+_END = r"(?![\w-]|\.\w)"  # the ending is the last label, not a label in the middle
 _BARE_DOMAIN = re.compile(
-    r"(?<![\w@.-])(?:[a-z0-9-]+\.)+"
-    r"(?:com|org|net|edu|gov|io|dev|app|info|co\.uk|org\.uk|ac\.uk|uk|example)"
-    r"(?![\w-])(?:/[^\s<>\[\]\"']*)?",
+    r"(?<![\w@.-])(?:"
+    rf"(?:[a-z0-9-]+\.)+(?:com|org|edu|gov|co\.uk|org\.uk|ac\.uk|example){_END}(?:{_PATH})?"
+    rf"|(?:[a-z0-9-]+\.)+(?:net|io|dev|app|info|uk){_END}{_PATH}"
+    rf"|(?:[a-z0-9-]+\.){{2,}}(?:net|io|dev|app|info|uk){_END}"
+    r")",
     re.IGNORECASE,
 )
 # Groups of digits joined by one separator each, as people write phone numbers:
-# "+44 (0)20 7946 0958", "07700 900123", "(555) 123-4567". The digit count decides.
-# Groups and separators use different characters, so matching stays linear.
+# "+44 (0)20 7946 0958", "07700 900123", "(555) 123-4567". Groups and separators use
+# different characters, so matching stays linear. `_looks_like_phone` then decides, so
+# that years, dates, times and reference numbers are left alone.
 _PHONE_CANDIDATE = re.compile(r"(?<![\w+,.])\+?\(?\d[\d()]*(?:[ \t.\-][\d()]+)*(?![\w])")
-_PHONE_MIN_DIGITS = 9
-_PHONE_MIN_DIGITS_INTERNATIONAL = 8
-_PHONE_MAX_DIGITS = 15
+_INTERNATIONAL_DIGITS = (8, 15)
+_NATIONAL_DIGITS = (10, 11)
+_AREA_CODE = re.compile(r"\(?0\d{2,}")
+_NORTH_AMERICAN = re.compile(r"(?:1[ .\-])?\(?\d{3}\)?[ .\-]\d{3}[ .\-]\d{4}")
 
 _PLACEHOLDER = re.compile("|".join(re.escape(item) for item in PLACEHOLDERS))
 _WHITESPACE = re.compile(r"\s+")
@@ -67,6 +72,22 @@ def _replace_keeping_tail(pattern: re.Pattern[str], placeholder: str, text: str)
     return pattern.subn(swap, text)
 
 
+def _looks_like_phone(number: str) -> bool:
+    """True for a number written the way phone numbers are.
+
+    International: a leading "+" or "00" and 8 to 15 digits. National: an area code that
+    starts with 0 and has at least three digits, and 10 or 11 digits in all. North
+    American: three, three and four digits. Anything else, such as "2019 2020 2021",
+    "2021-03-15 10" or a nine-digit reference, is not a phone number.
+    """
+    digits = sum(char.isdigit() for char in number)
+    if number.startswith(("+", "00")):
+        return _INTERNATIONAL_DIGITS[0] <= digits <= _INTERNATIONAL_DIGITS[1]
+    if _AREA_CODE.match(number):
+        return _NATIONAL_DIGITS[0] <= digits <= _NATIONAL_DIGITS[1]
+    return bool(_NORTH_AMERICAN.fullmatch(number))
+
+
 def _replace_phones(text: str) -> tuple[str, int]:
     count = 0
 
@@ -74,10 +95,7 @@ def _replace_phones(text: str) -> tuple[str, int]:
         nonlocal count
         found = match.group(0)
         number = found.rstrip("(")
-        digits = sum(char.isdigit() for char in number)
-        international = number.startswith(("+", "00"))
-        minimum = _PHONE_MIN_DIGITS_INTERNATIONAL if international else _PHONE_MIN_DIGITS
-        if not minimum <= digits <= _PHONE_MAX_DIGITS:
+        if not _looks_like_phone(number):
             return found
         count += 1
         return PHONE_PLACEHOLDER + found[len(number) :]

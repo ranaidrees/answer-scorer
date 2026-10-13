@@ -29,7 +29,7 @@ from scorer.config import (
     load_prompt,
     load_rubric,
 )
-from scorer.grounding import check_evidence
+from scorer.grounding import MAX_QUOTES, check_evidence
 from scorer.injection import detect_injection, neutralise_delimiters
 from scorer.model_client import ModelClient, ModelResult, ModelUnavailableError
 from scorer.rationale_screen import screen_rationale
@@ -232,7 +232,8 @@ async def score_answer(
         flags.inconsistent = combined.inconsistent
         flags.off_topic = combined.off_topic
         # 8. Grounding check on every evidence quote.
-        grounding = check_evidence(combined.chosen.evidence, answer)
+        # Only the first MAX_QUOTES are checked; any more count as ungrounded.
+        grounding = check_evidence(combined.chosen.evidence, answer, max_quotes=MAX_QUOTES)
         evidence = grounding.evidence
         flags.ungrounded_quotes = grounding.ungrounded
         # 9. Rationale screen.

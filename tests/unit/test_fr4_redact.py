@@ -110,6 +110,49 @@ def test_fr4_placeholders_do_not_count_as_answer_text():
     assert result.remaining_chars == len(", , ,")
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I ran the review in 2019 2020 2021 and the numbers improved each year.",
+        "The outage started at 2021-03-15 10:30 and I was paged at once.",
+        "It was ticket 123456789 and I picked it up the same day.",
+        "The audit covered 01.02.2024 10 sites in total.",
+        "We moved the service from asp.net to a newer framework.",
+        "The script used node.js and socket.io for the live board.",
+        "Batch 4521 7788 0031 9920 was the one that failed.",
+    ],
+)
+def test_fr4_redaction_leaves_years_dates_references_and_product_names_alone(text):
+    result = redact(text)
+    assert result.text == text
+    assert result.redactions == 0
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["docs.example.net", "example.io/board", "team.example.dev/plan", "example.net/a"],
+)
+def test_fr4_redaction_still_replaces_a_web_address_with_a_path_or_a_third_label(url):
+    result = redact(f"The plan is at {url} for everyone.")
+    assert result.text == f"The plan is at {URL_PLACEHOLDER} for everyone."
+
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "ren" + chr(0xE9) + "e.martin@example.com",
+        "j" + chr(0xF6) + "rg@example.org",
+        chr(0x43F) + chr(0x435) + chr(0x442) + "@example.com",
+        "sam@b" + chr(0xFC) + "cher.example",
+    ],
+    ids=["accent-in-name", "umlaut-in-name", "cyrillic-name", "umlaut-in-domain"],
+)
+def test_fr4_redaction_removes_the_whole_of_an_address_with_non_ascii_letters(email):
+    result = redact(f"I wrote to {email} and the team replied.")
+    assert result.text == f"I wrote to {EMAIL_PLACEHOLDER} and the team replied."
+    assert result.emails == 1
+
+
 def test_fr4_remaining_characters_ignore_spare_whitespace():
     result = redact("I  asked\n\nthe   team   sam@example.com   ")
     assert result.remaining_chars == len("I asked the team")

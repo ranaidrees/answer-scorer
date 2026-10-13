@@ -172,6 +172,114 @@ def test_fr4_capitalised_ordinary_words_are_not_taken_as_names():
     assert {"finance", "march", "excel", "eventually"} <= NOT_PERSONAL_NAMES
 
 
+@pytest.mark.parametrize(
+    ("answer", "rationale", "names"),
+    [
+        (
+            "I asked McKenzie for the figures and then spoke to DeShawn about the delay.",
+            "The candidate asked McKenzie and DeShawn before acting.",
+            ("McKenzie", "DeShawn"),
+        ),
+        (
+            "The plan came from O'Brien, and I checked it with the whole team first.",
+            "The candidate checked the plan from O'Brien with the team.",
+            ("O'Brien",),
+        ),
+        (
+            "I knew it would take time, so I asked Will what he needed and we will meet weekly.",
+            "The candidate asked Will what was needed.",
+            ("Will",),
+        ),
+        (
+            "I asked Mark to mark the tickets he had finished, and we agreed a list.",
+            "The candidate names the step agreed with Mark.",
+            ("Mark",),
+        ),
+        (
+            "Marisol disagreed with my plan. Marisol wanted more time, so I asked what was needed.",
+            "Marisol's concern is named, and the candidate describes the step taken.",
+            ("Marisol",),
+        ),
+        (
+            "My colleague Anne-Marie wanted more testing, so I asked what she needed.",
+            "The candidate asked Marie what was needed.",
+            ("Marie",),
+        ),
+        (
+            "I shared Priya's notes with the team and we agreed the next step.",
+            "The candidate shared notes from Priya with the team.",
+            ("Priya",),
+        ),
+        (
+            "- Okonkwo covered the phones\n- I covered the desk, and we swapped at noon.",
+            "The candidate describes sharing work with Okonkwo.",
+            ("Okonkwo",),
+        ),
+    ],
+    ids=["inner-capitals", "apostrophe", "will", "mark", "sentence-start-in-both",
+         "hyphenated", "possessive", "list-item"],
+)  # fmt: skip
+def test_fr4_names_that_the_first_version_missed_are_flagged(answer, rationale, names):
+    result = screen_rationale(rationale, answer)
+    assert result.names == names
+    assert result.flagged is True
+
+
+@pytest.mark.parametrize(
+    ("answer", "rationale"),
+    [
+        (
+            "I'm sure we couldn't have done it alone. Don't forget the team helped. We've kept "
+            "the weekly note and I'd do it again.",
+            "The candidate describes sharing credit. Don't read the result as vague: it is stated.",
+        ),
+        (
+            "Turning to the cause, I checked the logs. Rather than guess, I tested each part. "
+            "Whatever the result, I wrote it down. Everybody saw the notes on Fridays.",
+            "Turning to the level rule, the candidate tested causes one at a time. Rather than "
+            "one idea, two options were compared. Everybody involved agreed the way forward.",
+        ),
+        (
+            "Conflict was rare in our team. Anyone could raise a concern at the Christmas review.",
+            "Conflict is described, and the candidate names a concern. Anyone reading the answer "
+            "can see the result is stated.",
+        ),
+        (
+            "We used the HR system and the NHS guidance, and I spoke to IT about access.",
+            "The candidate describes gathering information from HR and IT.",
+        ),
+        (
+            "Grant funding was short. Vincent Street office was closing, so we planned the move.",
+            "The candidate describes a specific problem and states the result.",
+        ),
+    ],
+    ids=["contractions", "sentence-openers", "common-words", "acronyms", "no-repeat"],
+)
+def test_fr4_ordinary_capitalised_words_do_not_count_as_repeated_names(answer, rationale):
+    result = screen_rationale(rationale, answer)
+    assert result.names == ()
+    assert result.flagged is False
+
+
+def test_fr4_name_candidates_in_the_dev_golden_answers_are_not_ordinary_words():
+    """Tuning looks at `dev` rows only. A candidate is not a hit: the screen fires only when
+    the rationale repeats it. This keeps the stop list honest on the answers we can see."""
+    import json
+
+    from tests.unit.samples import REPO_ROOT
+
+    path = REPO_ROOT / "evals" / "datasets" / "golden.jsonl"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    dev = [row for row in rows if row["split"] == "dev"]
+    assert len(dev) == 20
+
+    candidates = set()
+    for row in dev:
+        certain, possible = find_names(row["answer"])
+        candidates |= certain | possible
+    assert candidates == set(), "an ordinary word is being read as a name: add it to the stop list"
+
+
 def test_fr4_a_name_in_the_rationale_that_is_not_in_the_answer_is_not_a_name_hit():
     result = screen_rationale("The candidate asked Priya for a view.", TEAMWORK_ANSWER)
     assert result.names == ()

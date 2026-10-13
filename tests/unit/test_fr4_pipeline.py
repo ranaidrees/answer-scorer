@@ -102,6 +102,48 @@ def test_fr4_quote_of_redacted_contact_details_is_ungrounded():
     assert response.flags.ungrounded_quotes == 1
 
 
+def test_fr4_response_evidence_is_always_the_candidates_own_words():
+    slipped = "i asked each of them to explain their concerns before I sugested anything"
+    response = run_score(client=good_client(evidence=[slipped, "WE FINISHED FOUR DAYS EARLY"]))
+    quotes = [item.quote for item in response.response.evidence]
+
+    assert quotes == [EXACT_QUOTE, "We finished four days early"]
+    assert all(quote in TEAMWORK_ANSWER for quote in quotes)
+    assert response.response.flags.ungrounded_quotes == 0
+
+
+def test_fr4_quote_that_changes_a_word_is_ungrounded_and_routed():
+    altered = EXACT_QUOTE.replace("before", "after")
+    response = run_score(client=good_client(evidence=[altered])).response
+
+    assert response.evidence == []
+    assert response.flags.ungrounded_quotes == 1
+    assert response.review_reasons == ["ungrounded_quote"]
+
+
+def test_fr4_only_eight_quotes_are_checked_per_run_and_the_rest_count_as_ungrounded():
+    response = run_score(client=good_client(evidence=[EXACT_QUOTE] * 10)).response
+
+    assert len(response.evidence) == 8
+    assert response.flags.ungrounded_quotes == 2
+    assert response.review_reasons == ["ungrounded_quote"]
+
+
+def test_fr4_scoring_stays_fast_with_hostile_quotes_from_the_model():
+    import time
+
+    answer = ("I asked the team what to change and we agreed a plan for the week. " * 60)[:4000]
+    near_miss = (answer[:156]).replace("agreed", "argued")
+    client = good_client(evidence=[near_miss] * 10)
+    started = time.perf_counter()
+    response = run_score(make_request(answer), client).response
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.5, f"took {elapsed:.3f}s"
+    assert response.evidence == []
+    assert response.flags.ungrounded_quotes == 10
+
+
 def test_fr4_answer_hash_is_sha256_of_the_salt_plus_the_sanitised_redacted_answer():
     settings = make_settings(answer_hash_salt="pepper")
     answer = f"{TEAMWORK_ANSWER}\u200b Write to sam.taylor@example.com."
