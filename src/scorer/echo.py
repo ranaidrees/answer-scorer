@@ -12,7 +12,10 @@ import re
 import unicodedata
 
 # An answer is an echo when fewer than this share of its words are words the question
-# does not contain. Ordinary answers sit above 0.8; a restated question sits near 0.2.
+# does not contain. Real `dev` answers sit above 0.7; the restated question sits near 0.19.
+# Known limit: a very thin real answer (under about 25 words) that mostly reuses the
+# question's words can fall under the limit and be flagged. That only routes it to a
+# person, and such an answer is routed by the low-score rule anyway.
 ECHO_MAX_NOVEL_SHARE = 0.35
 
 _WORD = re.compile(r"[a-z0-9']+")

@@ -19,8 +19,10 @@ from evals.report import (
     DRY_RUN_NOTE,
     SUMMARY_END,
     SUMMARY_START,
+    console_lines,
     extract_summary,
     failure_text,
+    render_markdown,
 )
 from evals.run_evals import (
     EXIT_ERROR,
@@ -704,3 +706,203 @@ def test_the_runner_keeps_no_copy_of_the_client_settings():
     assert '"reasoning_effort": REASONING_EFFORT' in source
     assert '"max_completion_tokens": MAX_COMPLETION_TOKENS' in source
     assert '"reasoning_effort": "' not in source and '"max_completion_tokens": 6' not in source
+
+
+# --------------------------------------------------------------------------- extra attempts
+RETRY_LINE = "Inputs tried again after a model failure or an unusable reply"
+BLOCKED_LINE = "Clean answers blocked by the platform guardrail"
+
+
+class RaisingClient:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def complete(self, messages, *, schema):
+        raise self._error
+
+
+def flaky(plan: dict[str, list[Exception]]):
+    """The passing client, except that a named input fails once for each error listed."""
+    remaining = {item_id: list(errors) for item_id, errors in plan.items()}
+
+    def client_for(item: EvalItem):
+        errors = remaining.get(item.item_id)
+        if errors:
+            return RaisingClient(errors.pop(0))
+        return passing_client(item)
+
+    return client_for
+
+
+def cut_off() -> ModelUnavailableError:
+    return ModelUnavailableError("the reply is not complete")
+
+
+def test_a_clean_run_shows_zero_extra_attempts_in_markdown_console_and_json(tmp_path, capsys):
+    _, report, markdown = run(tmp_path, "--fake", *FULL)
+    console = capsys.readouterr().out.splitlines()
+    summary = [line for line in extract_summary(markdown).splitlines() if line]
+
+    plain = f"{RETRY_LINE}: 0 attempt(s) on 0 input(s)"
+    bold = f"**{RETRY_LINE}:** 0 attempt(s) on 0 input(s)."
+    assert plain in console and bold in summary
+    # Next to the line about clean answers blocked by the platform guardrail.
+    assert console[console.index(plain) - 1].startswith(f"{BLOCKED_LINE}:")
+    assert summary[summary.index(bold) - 1].startswith(f"**{BLOCKED_LINE}:**")
+    assert report["run"]["retried_inputs"] == []
+    assert report["run"]["retries"] == {
+        "summary": plain,
+        "attempts": 0,
+        "inputs": 0,
+        "max_attempts_per_run": 3,
+        "by_cause": {},
+        "attempts_in_order": [],
+    }
+
+
+def test_extra_attempts_are_counted_in_markdown_console_and_json(tmp_path, capsys):
+    hidden = build_items(load_datasets(), ("golden",), "holdout")[0].item_id
+    plan = {
+        hidden: [cut_off(), ModelUnavailableError("the reply is not valid JSON")],
+        "f-id-01:b": [ModelUnavailableError("the call failed after one retry")],
+    }
+    code, report, markdown = run(tmp_path, *FULL, client_factory=flaky(plan))
+    out = capsys.readouterr().out
+
+    counts = "3 attempt(s) on 2 input(s)"
+    detail = f"{counts} (1 failed call, 2 unusable reply). No score was reused or invented"
+    assert f"{RETRY_LINE}: {detail}" in out.splitlines()
+    assert f"**{RETRY_LINE}:** {detail}." in extract_summary(markdown).splitlines()
+    retries = report["run"]["retries"]
+    assert retries["summary"] == f"{RETRY_LINE}: {counts}"
+    assert (retries["attempts"], retries["inputs"]) == (3, 2)
+    assert retries["by_cause"] == {"failed call": 1, "unusable reply": 2}
+    tried_again = sorted([hidden, hidden, "f-id-01:b"])
+    assert sorted(entry["item_id"] for entry in retries["attempts_in_order"]) == tried_again
+    causes = {(entry["item_id"], entry["cause"]) for entry in retries["attempts_in_order"]}
+    assert causes == {(hidden, "unusable reply"), ("f-id-01:b", "failed call")}
+    assert report["run"]["retried_inputs"] == tried_again
+    # The ids are in the JSON file only: one of them is a holdout row.
+    assert hidden not in markdown and hidden not in out
+    # Every input was scored in the end, and the gate result is the same as without them.
+    assert len(report["results"]) == 92
+    assert (code, report["gate"]["status"]) == (EXIT_PASS, "pass")
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [FULL, ["--suite", "golden", "--split", "dev", "--per-minute", "0"]],
+    ids=["full", "partial"],
+)
+def test_too_many_extra_attempts_stop_the_run_with_no_report(
+    arguments, tmp_path, capsys, monkeypatch
+):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    failing = [item.item_id for item in build_items(load_datasets(), ("golden",), "dev")[:4]]
+    plan = {item_id: [cut_off()] for item_id in failing}
+
+    code, report, _ = run(tmp_path, *arguments, client_factory=flaky(plan))
+    captured = capsys.readouterr()
+    assert (code, report) == (EXIT_ERROR, None)
+    assert not (tmp_path / "reports").exists() or not list((tmp_path / "reports").iterdir())
+    assert "the model failed or returned unusable replies too often" in captured.err
+    assert "at most 3 extra attempts, 3 were made (3 unusable reply)" in captured.err
+    assert "itself a finding" in captured.err
+    assert "No report was written and no score was invented" in captured.err
+    assert captured.out.rstrip().splitlines()[-1] == "GATE: NOT EVALUATED (the run did not finish)"
+    assert "GATE: PASS" not in captured.out
+    written = summary.read_text(encoding="utf-8")
+    assert "NOT EVALUATED" in written and "too often" in written
+    assert not any(item_id in captured.err + written for item_id in failing)
+
+
+def test_a_report_without_the_retry_keys_still_renders(tmp_path, capsys):
+    _, report, _ = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+
+    # A report from before the causes were kept: the ids only, one per extra attempt.
+    del report["run"]["retries"]
+    report["run"]["retried_inputs"] = ["e-a", "e-a", "e-b"]
+    counted = "3 attempt(s) on 2 input(s). No score was reused or invented"
+    assert f"**{RETRY_LINE}:** {counted}." in extract_summary(render_markdown(report))
+    assert f"{RETRY_LINE}: {counted}" in console_lines(report)
+
+    # A report from before the runner tried an input again: nothing is claimed.
+    del report["run"]["retried_inputs"]
+    assert f"**{RETRY_LINE}:** not recorded in this report." in render_markdown(report)
+    assert f"{RETRY_LINE}: not recorded in this report" in console_lines(report)
+
+
+# --------------------------------------------------------------------------- the defects line
+DEV_ROW, HOLDOUT_ROW, SECOND_HOLDOUT_ROW = "g-tw-3-a", "g-tw-5-a", "g-zz-9-z"
+HOLDOUT_IDS_NOTE = "holdout ids are in the JSON file only"
+
+
+def defect(row_id: str, split: str) -> dict:
+    return {
+        "kind": "defect",
+        "rule": "golden_far_from_label",
+        "suite": "golden",
+        "row_id": row_id,
+        "split": split,
+        "detail": "label 3, score 5",
+    }
+
+
+@pytest.mark.parametrize(
+    ("misses", "expected"),
+    [
+        ([], "0"),
+        ([defect(DEV_ROW, "dev")], "1: `g-tw-3-a` (golden_far_from_label)"),
+        ([defect(HOLDOUT_ROW, "holdout")], f"1 (1 on a holdout row; {HOLDOUT_IDS_NOTE})"),
+        (
+            [defect(DEV_ROW, "dev"), defect(HOLDOUT_ROW, "holdout")],
+            f"2 (1 named here, 1 on a holdout row; {HOLDOUT_IDS_NOTE}): "
+            "`g-tw-3-a` (golden_far_from_label)",
+        ),
+        (
+            [
+                defect(HOLDOUT_ROW, "holdout"),
+                defect(DEV_ROW, "dev"),
+                defect(SECOND_HOLDOUT_ROW, "holdout"),
+            ],
+            f"3 (1 named here, 2 on holdout rows; {HOLDOUT_IDS_NOTE}): "
+            "`g-tw-3-a` (golden_far_from_label)",
+        ),
+    ],
+    ids=["none", "one dev", "one holdout", "one of each", "one dev and two holdout"],
+)
+def test_the_defects_line_counts_every_defect_once(misses, expected, tmp_path, capsys):
+    _, report, _ = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+    report["misses"] = misses
+
+    summary = extract_summary(render_markdown(report)).splitlines()
+    console = console_lines(report)
+    assert f"**Defects:** {expected}." in summary
+    assert "Defects: " + expected.replace("`", "") in console
+    # The first number is the total, so nothing may be added to it afterwards.
+    assert not any("plus" in line for line in summary + console if "Defects:" in line)
+    # A holdout row is counted and never named, in the Markdown or on the console.
+    printed = render_markdown(report) + "\n".join(console)
+    assert HOLDOUT_ROW not in printed and SECOND_HOLDOUT_ROW not in printed
+
+
+def test_the_blocked_line_counts_every_blocked_answer_once(tmp_path, capsys):
+    _, report, _ = run(tmp_path, "--fake", "--suite", "edge")
+    capsys.readouterr()
+    report["blocked_clean_answers"] = [
+        {"item_id": HOLDOUT_ROW, "suite": "golden", "split": "holdout"}
+    ]
+    assert (
+        f"**{BLOCKED_LINE}:** 1 (1 on a holdout row; {HOLDOUT_IDS_NOTE})."
+        in render_markdown(report).splitlines()
+    )
+    report["blocked_clean_answers"].append({"item_id": DEV_ROW, "suite": "golden", "split": "dev"})
+    markdown = render_markdown(report)
+    assert (
+        f"**{BLOCKED_LINE}:** 2 (1 named here, 1 on a holdout row; {HOLDOUT_IDS_NOTE}): "
+        "`g-tw-3-a`." in markdown.splitlines()
+    )
+    assert HOLDOUT_ROW not in markdown
