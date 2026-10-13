@@ -1,0 +1,26 @@
+# Keep the build context small and free of anything private.
+# The Dockerfile copies only pyproject.toml, uv.lock, README.md, src/, rubrics/,
+# prompts/ and config/.
+
+# Version control, tooling and local state
+.git
+.github
+.claude
+.venv
+.azure
+.env*
+**/.env*
+private
+
+# Not part of the running app
+tests
+evals
+intent
+docs
+infra
+
+# Caches
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
