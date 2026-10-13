@@ -32,6 +32,9 @@ NOT_VALIDITY = (
     "is valid. Reliability is not validity."
 )
 HOLDOUT = "holdout"
+# The label of the line that counts the extra attempts of a run. The runner tries an input
+# again after a failed call or an unusable reply, so the count is shown in every summary.
+RETRY_LABEL = "Inputs tried again after a model failure or an unusable reply"
 
 GATE_WORDS = {"pass": "PASS", "fail": "FAIL", "not_evaluated": "NOT EVALUATED"}
 CLIENT_WORDS = {
@@ -141,15 +144,55 @@ def _holdout_note(count: int) -> str:
     return f", plus {count} on holdout rows (ids are in the JSON file only)" if count else ""
 
 
-def _defect_lines(report: Mapping) -> list[str]:
+def _holdout_share(total: int, hidden: int) -> str:
+    """How many of `total` sit on holdout rows. `total` already counts them, so none is added."""
+    if not hidden:
+        return ""
+    named = f"{total - hidden} named here, " if total > hidden else ""
+    rows = "a holdout row" if hidden == 1 else "holdout rows"
+    return f" ({named}{hidden} on {rows}; holdout ids are in the JSON file only)"
+
+
+def defect_count_text(report: Mapping, *, code: bool) -> str:
+    """The number of defects, and the dev rows they are on. Holdout rows are never named."""
+    mark = "`" if code else ""
     defects = [miss for miss in report["misses"] if miss["kind"] == "defect"]
+    listed = ", ".join(
+        f"{mark}{miss['row_id']}{mark} ({miss['rule']})" for miss in _visible(defects)
+    )
+    text = f"{len(defects)}" + _holdout_share(len(defects), _hidden_count(defects))
+    return text + (f": {listed}" if listed else "")
+
+
+def retry_text(attempts: int, inputs: int) -> str:
+    return f"{attempts} attempt(s) on {inputs} input(s)"
+
+
+def retry_count_text(report: Mapping) -> str:
+    """The extra attempts of a run, as counts. Ids stay in the JSON file: some are holdout rows."""
+    run = report["run"]
+    retries = run.get("retries")
+    if isinstance(retries, Mapping):
+        attempts, inputs = retries["attempts"], retries["inputs"]
+        by_cause = retries.get("by_cause") or {}
+    elif "retried_inputs" in run:
+        # A report written before the causes were kept.
+        ids = run["retried_inputs"]
+        attempts, inputs, by_cause = len(ids), len(set(ids)), {}
+    else:
+        # A report written before the runner tried an input again.
+        return "not recorded in this report"
+    text = retry_text(attempts, inputs)
+    if by_cause:
+        text += " (" + ", ".join(f"{count} {cause}" for cause, count in by_cause.items()) + ")"
+    if attempts:
+        text += ". No score was reused or invented"
+    return text
+
+
+def _defect_lines(report: Mapping) -> list[str]:
     variance = [miss for miss in report["misses"] if miss["kind"] == "variance"]
-    shown = _visible(defects)
-    listed = ", ".join(f"`{miss['row_id']}` ({miss['rule']})" for miss in shown)
-    line = f"**Defects:** {len(defects)}"
-    if shown:
-        line += f": {listed}"
-    line += _holdout_note(_hidden_count(defects)) + "."
+    line = f"**Defects:** {defect_count_text(report, code=True)}."
     by_rule = Counter(miss["rule"] for miss in variance)
     rules = ", ".join(f"{count} {rule}" for rule, count in sorted(by_rule.items()))
     variance_line = f"**Variance:** {len(variance)}" + (f" ({rules})" if rules else "")
@@ -160,9 +203,10 @@ def _blocked_line(report: Mapping) -> str:
     blocked = report["blocked_clean_answers"]
     shown = ", ".join(f"`{item['item_id']}`" for item in _visible(blocked))
     line = f"**Clean answers blocked by the platform guardrail:** {len(blocked)}"
+    line += _holdout_share(len(blocked), _hidden_count(blocked))
     if shown:
         line += f": {shown}"
-    return line + _holdout_note(_hidden_count(blocked)) + "."
+    return line + "."
 
 
 def failure_text(failure: Mapping, *, code: bool) -> str:
@@ -227,7 +271,9 @@ def summary_lines(report: Mapping) -> list[str]:
         listed = "; ".join(failure_text(failure, code=True) for failure in failures)
         lines += [f"**The gate also fails for:** {listed}.", ""]
     lines += _defect_lines(report)
-    lines += ["", _blocked_line(report), "", NO_INTERVALS, SUMMARY_END]
+    lines += ["", _blocked_line(report), ""]
+    lines += [f"**{RETRY_LABEL}:** {retry_count_text(report)}.", ""]
+    lines += [NO_INTERVALS, SUMMARY_END]
     return lines
 
 
@@ -412,15 +458,10 @@ def console_lines(report: Mapping) -> list[str]:
     lines.append("Breached: " + (", ".join(report["gate"]["breached"]) or "none"))
     for failure in report.get("gate_failures") or []:
         lines.append("Gate failure: " + failure_text(failure, code=False))
-    defects = [miss for miss in report["misses"] if miss["kind"] == "defect"]
-    shown = ", ".join(f"{miss['row_id']} ({miss['rule']})" for miss in _visible(defects))
-    lines.append(
-        f"Defects: {len(defects)}"
-        + (f": {shown}" if shown else "")
-        + _holdout_note(_hidden_count(defects))
-    )
+    lines.append(f"Defects: {defect_count_text(report, code=False)}")
     blocked = report["blocked_clean_answers"]
     lines.append(f"Clean answers blocked by the platform guardrail: {len(blocked)}")
+    lines.append(f"{RETRY_LABEL}: {retry_count_text(report)}")
     cost = usage["cost"]
     cost_text = (
         f"{cost['amount']:.4f} {cost['currency']} (estimate)"
