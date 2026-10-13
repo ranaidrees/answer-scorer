@@ -10,7 +10,7 @@ The application is **not deployed yet**. Eleven pull requests are merged to `mai
 
 | Tab, left to right | Needs | State |
 |---|---|---|
-| 1. GitHub README | The repository | Ready. One pull request number is still PENDING, and the figures from the deployed app are pending live |
+| 1. GitHub README | The repository | Ready. The figures from the deployed app are pending live |
 | 2. Live app | The live URL and the demo token | Pending live. Fallback: the same app run locally |
 | 3. Foundry portal, model deployment | The portal | Pending live (the owner's sign-in) |
 | 4. Application Insights | The portal | Pending live (the owner's sign-in) |

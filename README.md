@@ -4,7 +4,7 @@ A small reference implementation of governed AI output for a high-stakes decisio
 
 > **Disclaimer.** **Synthetic data only:** every answer, label and name in this repository is invented. **A reference implementation:** it shows that the controls work, not that the scoring is valid. Reliability is not validity; validity needs trained raters and occupational psychologists. **Not for use in real hiring decisions.**
 
-**Status, 13 October 2026, late evening:** eleven pull requests are merged to `main`, the last of them #13 (the baseline, the stability proof and the review fixes). The weak-prompt pull request, #15, is open by design and its merge is blocked by the eval gate. The application is not deployed yet: a deploy run waits for the owner's approval, so there is no live URL. Anything that needs one is marked "pending live", and anything not known yet is marked PENDING.
+**Status, 13 October 2026, late evening:** eleven pull requests are merged to `main`, the last of them #13 (the baseline, the stability proof and the review fixes). The weak-prompt pull request, #15, is open by design and its merge is blocked by the eval gate. The application is not deployed yet: a deploy run waits for the owner's approval, so there is no live URL. Anything that needs one is marked "pending live".
 
 ## Results scoreboard
 
@@ -121,7 +121,7 @@ The artifact chain is intent, then spec, then plan, then pull requests, then pro
 | S6 | Dashboard queries, workbook, alerts and SLOs | [#11](https://github.com/ranaidrees/answer-scorer/pull/11) |
 | S4c | Baseline, the stability proof and the review fixes | [#13](https://github.com/ranaidrees/answer-scorer/pull/13) |
 | Weak prompt | A weakened prompt that the gate blocks; stays open and must not merge | [#15](https://github.com/ranaidrees/answer-scorer/pull/15) |
-| S8 | This demo pack | [[PENDING: pull request number for S8]] |
+| S8 | This demo pack | [#16](https://github.com/ranaidrees/answer-scorer/pull/16) |
 | S5b | First deploy, approved by the owner | Pending live |
 
 Each slice had `ci` green, a verifier PASS and an independent review; the verdicts and findings are comments on its pull request.
