@@ -243,8 +243,8 @@ Last updated: Tuesday 13 October 2026, 23:50 (end of Phase 2. A second lead sess
 | 6 | S4a datasets and label audit | audit agreement 30 of 30; two record gaps found by the CI review, fixed before merge |
 | 7 | S2 scorer core | the CI review skipped itself because this diff edits the review workflow; in-session review stands |
 | 8 | S3 live model, API, page, telemetry | CI review: no Important findings |
-| 9 | S4b eval runner and `evals` workflow | merged with CI review findings open; fixed in this pull request (see Deviations) |
-| 10 | S5a Dockerfile and deploy workflow | merged with one finding open; fixed in this pull request. Its merge queued a deploy run that must not be approved |
+| 9 | S4b eval runner and `evals` workflow | merged with CI review findings open; fixed in #13 (see Deviations) |
+| 10 | S5a Dockerfile and deploy workflow | merged with one finding open; fixed in #13. Its merge queued a deploy run that must not be approved |
 | 11 | S6 observability | merged with one record finding open; the Status in #13 was that record |
 | 13 | S4c baseline, stability proof and the review fixes for S3, S4b and S5a | verifier PASS; live `evals` gate PASS twice; the one Important finding (S4c-8) accepted by the owner (S4c-14) |
 
@@ -297,7 +297,7 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 - No separate `plan/wave-N` pull requests in the unattended build (decision D12).
 - Branches are never force pushed, so a pushed branch is brought up to date by merging rather than rebasing (decision D9). Review findings on a branch lower in the stack are fixed on the branch at the top.
 - **The stack was merged late and in one go.** Nothing was merged until the owner turned on email privacy (decision D19). Then #2 to #11 were merged bottom-up in about an hour, each once `ci` passed, with `main` merged into the next branch each time. Each merge was checked to be the branch plus exactly what `main` had gained.
-- **Three pull requests were merged with CI review findings open** (#9, #10, #11), because their fixes were already written on this branch at the top of the stack and pushed branches are not rewritten. Between those merges and this one, `main` holds an eval gate with no minimum n, workflows that read deleted variables (so `evals` and the deploy stop at sign-in) and a stale Status. The disposition is recorded as a comment on each of the three.
+- **Three pull requests were merged with CI review findings open** (#9, #10, #11), because their fixes were already written on the S4c branch at the top of the stack and pushed branches are not rewritten. Between those merges and the merge of #13, `main` held an eval gate with no minimum n, workflows that read deleted variables (so `evals` and the deploy stop at sign-in) and a stale Status. The disposition is recorded as a comment on each of the three.
 - **#3 was replaced by #12.** Deleting a merged base branch closed the pull request stacked on it. From then on the next pull request was retargeted to `main` before the merged branch was deleted.
 - **The CI Claude review was replaced by an in-session review against `REVIEW.md`** until its workflow was on `main` (decision D25). After that the CI review ran on each pull request as `main` was merged in, except #7.
 - Pull request #1 was replaced rather than updated and merged (decision D20).
@@ -308,3 +308,4 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 - **S6: two alert rules cost about 0.75 GBP a month in total.** This is a small fixed charge, against the rule of no fixed charges; it is kept because the spec asks for the alerts, and it is listed here so the owner can remove them after the walkthrough.
 - Three early eval reports cite commit `a6915ca`, which a rebase of the then unpushed branch replaced (decision S4c-13).
 - Screenshots for the demo pack are pending Phase 3.
+- **S8 changed scorer code.** The final verification found that FR-2's start-up validation was missing; the fix (four lines in `src/scorer/api.py` and three tests) is in the S8 pull request although the plan's file list for S8 names documents only (decision S8-9). The verifier then returned FAIL on the demo pack for two statements the reports contradicted; they were corrected and the verifier was not run again (decision S8-10).

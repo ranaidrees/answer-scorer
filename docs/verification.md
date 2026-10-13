@@ -13,7 +13,7 @@ The verifier returned **FAIL** with one criterion not met: FR-2, "validates sche
 | "How we will know it worked" (11 rows) | 4 | 5 | 2 |
 | Functional requirements (42 rows) | 42, one of them after the fix above | 0 | 0 |
 
-Commands the verifier ran: `uv run poe check` ("All checks passed!", "90 files already formatted", "1664 passed") and the offline dry run of the eval suite ("GATE: PASS (dry run with the fake model; says nothing about the scorer's quality)").
+Commands the verifier ran: `uv run poe check` ("All checks passed!", "90 files already formatted", "1664 passed" on `main`; this branch, with the demo pack tests and the fix, gives 97 files and 1760 passed) and the offline dry run of the eval suite ("GATE: PASS (dry run with the fake model; says nothing about the scorer's quality)").
 
 ## How we will know it worked
 
