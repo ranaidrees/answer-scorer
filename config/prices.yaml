@@ -1,0 +1,21 @@
+# Model prices used for the cost estimate on every score (spec C7).
+# Read from the Azure Retail Prices API, never guessed. The cost shown anywhere in this
+# project is an estimate: it prices every input token at the full input rate, so it does
+# not take the cached-input discount, and it is not the invoice.
+#
+# Query: source_url with currencyCode='GBP' and the filter
+#   armRegionName eq 'uksouth' and productName eq 'Azure OpenAI GPT5'
+#   and contains(meterName, '5.4 mini')
+# Meters used (Global Standard, per 1M tokens):
+#   input         "5.4 mini Inp Gl 1M Tokens"
+#   cached_input  "5.4 mini cd Inp Gl 1M Tokens"
+#   output        "5.4 mini Opt Gl 1M Tokens"
+currency: GBP
+unit: per_1m_tokens
+input: 0.5661
+cached_input: 0.0566
+output: 3.3964
+source_url: https://prices.azure.com/api/retail/prices
+retrieved: 2026-10-13
+model: gpt-5.4-mini
+region: uksouth

@@ -1,0 +1,54 @@
+name: Report a problem
+description: Tell us about a score, a flag or a page that looks wrong in the answer scorer demo.
+title: "Problem: "
+labels:
+  - reported-problem
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. This repository and its issues are public.
+
+        **Do not paste any answer text, question text, rationale or quote.** Do not include
+        names, contact details, the demo token or anything else that is personal or secret.
+        The trace id is enough for the maintainer to find the request: telemetry holds
+        metadata only, never the answer.
+
+        This demo uses synthetic data and is decision support only. It is not for real
+        hiring decisions.
+  - type: input
+    id: trace-id
+    attributes:
+      label: Trace id
+      description: Shown on the result card, 32 characters. Leave empty if there was no result.
+      placeholder: 0123456789abcdef0123456789abcdef
+    validations:
+      required: false
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What looks wrong?
+      options:
+        - The score or level looks wrong
+        - The rationale looks wrong
+        - A highlighted quote looks wrong
+        - An answer was flagged or sent for review when it should not have been
+        - An answer was not flagged when it should have been
+        - The page or the service did not work
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened, and what did you expect?
+      description: Describe it in your own words, without quoting the answer.
+    validations:
+      required: true
+  - type: checkboxes
+    id: no-candidate-text
+    attributes:
+      label: Before you submit
+      options:
+        - label: This report contains no answer text, no personal details and no token.
+          required: true
