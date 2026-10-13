@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+# Infrastructure only. There is no `services` section on purpose: the application
+# is built and deployed only by GitHub Actions, never from a developer machine.
+name: answer-scorer
+infra:
+  provider: bicep
+  path: infra
+  module: main

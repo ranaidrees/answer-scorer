@@ -38,6 +38,10 @@ jobs:
       - name: Lint, format check and tests (including hook tests)
         run: uv run poe check
 
+      # The Azure CLI is preinstalled on the runner. No sign-in: this only compiles.
+      - name: Build the Bicep
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
       - name: Scan the full history for secrets (gitleaks)
         env:
           GITLEAKS_VERSION: "8.30.1"
