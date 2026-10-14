@@ -825,8 +825,9 @@ def scorecard_row(
 
 
 def scorecard_rows(root: Path) -> list[dict]:
-    """The scorecard's checks that no table in Application Insights holds: the stability
-    proof, and the quality of the golden dataset, read from the dataset files."""
+    """The scorecard's checks that no table in Application Insights holds. The dataset
+    sizes, coverage and provenance are computed from the dataset files; the stability
+    proof (S4c-11) and the blind label audit (evals/label_audit.md) are recorded results."""
     data = {name: dataset_rows(root, name) for name in SPEC_SIZES}
     sizes = [len(data[name]) for name in SPEC_SIZES]
     golden = data["golden.jsonl"]
@@ -847,7 +848,7 @@ def scorecard_rows(root: Path) -> list[dict]:
             7,
             "Stability proof: accepted prompt three PASS in a row, weakened prompt three FAIL",
             "3 and 3",
-            "3 PASS and 3 FAIL",
+            "3 PASS and 3 FAIL, at the third attempt",
             "met",
             "decision S4c-11",
         ),

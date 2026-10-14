@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14T15:26:05Z",
+  "generated_at": "2026-10-14T15:40:19Z",
   "repository": "ranaidrees/answer-scorer",
   "before_production": {
     "figures": [
@@ -501,7 +501,7 @@
         "target": "3 and 3",
         "critical": false,
         "basis": "decision S4c-11",
-        "actual": "3 PASS and 3 FAIL",
+        "actual": "3 PASS and 3 FAIL, at the third attempt",
         "state": "met"
       },
       {

@@ -728,7 +728,7 @@ def trust_scorecard(
         text_item(
             "scorecard heading",
             "## Trust scorecard\n\n"
-            "Every gated check on the scorer, grouped in five aspects: input guards, output guards, "
+            "Every check on the scorer, gates and SLOs, grouped in five aspects: input guards, output guards, "
             "offline evaluation, online evaluation and the golden dataset. The **trust score** is the "
             "share of measured checks that are met. A check is **critical** when a miss means a "
             "person may not see an answer they should; a critical miss makes the status red "
@@ -736,7 +736,9 @@ def trust_scorecard(
             "top of the page; offline checks read the newest nightly eval run in that range; gate "
             "values come from [`evals/thresholds.yaml`]"
             f"({REPOSITORY_URL}/blob/main/evals/thresholds.yaml), so the scorecard and the eval gate "
-            "cannot disagree. The golden dataset rows and the stability proof come from the "
+            "cannot disagree: offline checks take the gate's own verdict from the eval run. If a "
+            "critical check has no data in the time range, the score reads insufficient data "
+            "instead of a number. The golden dataset rows and the stability proof come from the "
             f"snapshot of {as_of}. The query is kept in "
             f"[`dashboards/scorecard.kql`]({REPOSITORY_URL}/blob/main/dashboards/scorecard.kql).",
             tab,
@@ -745,7 +747,7 @@ def trust_scorecard(
             "scorecard overall",
             checks + "\n" + parts["overall"],
             4,
-            "Trust score: the share of measured checks met, and the status",
+            "Trust score (live): the share of measured checks met, and the status",
             no_data,
             tab,
         ),
@@ -753,7 +755,7 @@ def trust_scorecard(
             "scorecard aspects",
             checks + "\n" + parts["aspects"],
             3,
-            "Score per aspect: checks met of checks measured",
+            "Score per aspect (live): checks met of checks measured",
             no_data,
             tab,
         ),
@@ -776,9 +778,10 @@ def trust_scorecard(
         ),
         text_item(
             "scorecard confidence note",
-            "Every response returns its three runs, the spread, evidence quotes checked against "
-            "the answer, the review reasons, the prompt and model version and a trace id. Run "
-            "agreement is a consistency signal, not a calibrated probability that the score is "
+            "A scored response returns its three runs and their spread (a response the platform "
+            "guardrail blocked has neither), evidence quotes checked against the answer, the review "
+            "reasons, the prompt version and model deployment, and a trace id when tracing is on. "
+            "Run agreement is a consistency signal, not a calibrated probability that the score is "
             "right; an answer whose runs are two or more levels apart always goes to a person.",
             tab,
         ),
@@ -786,7 +789,7 @@ def trust_scorecard(
             "scorecard checks",
             checks + "\n" + parts["detail"],
             0,
-            "The checks behind the score: target, actual value and state",
+            "The checks behind the score (live, with snapshot rows): target, actual value and state",
             no_data,
             tab,
         ),

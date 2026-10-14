@@ -52,7 +52,7 @@ resource workbook 'Microsoft.Insights/workbooks@2023-06-01' = {
   kind: 'shared'
   properties: {
     displayName: workbookDisplayName
-    description: 'How the answer scorer was delivered: gates before production, deploys and the live service, and the AI-native SDLC. GitHub figures are a snapshot refreshed by a pull request.'
+    description: 'Trust scorecard of the answer scorer (guards, offline and online evaluation, golden dataset), then how it was delivered: gates before production, deploys and the live service, and the AI-native SDLC. GitHub figures are a snapshot refreshed by a pull request.'
     category: 'workbook'
     sourceId: applicationInsights.id
     version: 'Notebook/1.0'

@@ -9,7 +9,7 @@ The operational dashboard shows how the live scorer behaves. Nothing in Azure sh
 
 ## Outcome
 
-One Azure Workbook, **Answer scorer: delivery evidence**, with four tabs. The first was added at the owner's request after the first three were built, for the CEO and CTO (decision S9-4):
+One Azure Workbook, **Answer scorer: delivery evidence**, with four tabs. The first was added at the owner's request after the first three were built, for leadership (decision S9-4):
 
 0. **Trust scorecard:** one trust score and a status, a score for each of five aspects (input guards, output guards, offline evaluation, online evaluation, golden dataset quality), the confidence of each live response as the agreement of its three runs, every check behind the score with its target and actual value, and a plain statement that validity against trained raters is not established.
 1. **Before production:** the gates every change passed (tests, `ci`, the eval gate and its stability proof, supply-chain controls), with build and test time per `ci` run as a chart.
@@ -28,4 +28,4 @@ Every figure links to the page or file it came from. Each tab says what its figu
 
 ## How we will know it worked
 
-The owner opens the workbook in the portal and walks the three tabs in under two minutes, and every figure on them can be traced with one click.
+The owner opens the workbook in the portal and walks the four tabs in under three minutes, and every figure on them can be traced with one click.

@@ -378,8 +378,11 @@ def test_the_scorecard_queries_are_the_parts_of_its_file_with_every_token_filled
 def test_the_scorecard_gate_values_are_those_of_the_thresholds_file():
     thresholds = builder.parse_thresholds(read(THRESHOLDS_FILE))
     filled = named(built(), "scorecard checks")["content"]["query"]
-    assert f">= {thresholds['golden_qwk']:g}" in filled
-    assert f"<= {thresholds['ungrounded_quote_rate']:g}" in filled
+    assert f'"at least {thresholds["golden_qwk"]:g}"' in filled
+    assert f'"at most {thresholds["ungrounded_quote_rate"] * 100:g}%"' in filled
+    # The state of an offline check is the gate's own verdict, never a re-comparison.
+    assert 'tolower(tostring(ev["golden_qwk_passed"])) == "true"' in filled
+    assert 'todouble(ev["golden_qwk"]) >=' not in filled
     assert f'"at most {thresholds["golden_control_review_rate"] * 100:g}%"' in filled
     assert f'"at least {thresholds["golden_within_1"] * 100:g}%"' in filled
     used = set(re.findall(r"__[TP]_([a-z0-9_]+)__", read(SCORECARD_FILE)))
