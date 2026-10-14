@@ -13,6 +13,7 @@
 targetScope = 'resourceGroup'
 
 @description('Name of the existing Application Insights resource in this resource group. The workbook and both alert rules are bound to it here, so no resource ID is written in any file.')
+@minLength(1)
 param applicationInsightsName string
 
 @secure()
