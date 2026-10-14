@@ -43,6 +43,7 @@ jobs:
         run: |
           az bicep build --file infra/main.bicep --stdout > /dev/null
           az bicep build --file infra/observability.bicep --stdout > /dev/null
+          az bicep build --file infra/sdlc_dashboard.bicep --stdout > /dev/null
 
       # Build only: nothing is pushed, so no registry sign-in is needed.
       - name: Build the container image (no push)

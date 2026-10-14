@@ -1,0 +1,489 @@
+{
+  "generated_at": "2026-10-14T14:15:18Z",
+  "repository": "ranaidrees/answer-scorer",
+  "before_production": {
+    "figures": [
+      {
+        "measure": "Tests passing",
+        "value": "1840",
+        "detail": "unit and hook tests collected by pytest; every pull request must pass them all in ci",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
+      },
+      {
+        "measure": "ci runs passed",
+        "value": "36 of 36",
+        "detail": "completed runs of the ci workflow",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
+      },
+      {
+        "measure": "Median ci job time",
+        "value": "47 s",
+        "detail": "the ci job, median of 36 runs",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
+      },
+      {
+        "measure": "Median test step time",
+        "value": "19 s",
+        "detail": "the lint, format check and tests step, median of 36 runs",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
+      },
+      {
+        "measure": "Pull requests merged",
+        "value": "15",
+        "detail": "pull requests merged into main",
+        "source": "https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged"
+      },
+      {
+        "measure": "Blocked by the eval gate",
+        "value": "#15",
+        "detail": "open pull requests whose required evals check failed, so the merge is blocked",
+        "source": "https://github.com/ranaidrees/answer-scorer/pull/15"
+      },
+      {
+        "measure": "Eval gate stability proof",
+        "value": "3 PASS, 3 FAIL",
+        "detail": "accepted prompt v1: 3 PASS in a row; weakened prompt v0-weak: 3 FAIL in a row (decision S4c-11)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md"
+      },
+      {
+        "measure": "Kappa of the three proof runs",
+        "value": "0.926, 0.947, 0.926",
+        "detail": "quadratic weighted kappa against the labels, n=30, gate at least 0.70, accepted prompt v1",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/docs/eval_card.md"
+      },
+      {
+        "measure": "Injection cases flagged and routed",
+        "value": "18 of 18",
+        "detail": "in every run of the stability proof; gate 100%",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/docs/eval_card.md"
+      },
+      {
+        "measure": "Label audit agreement",
+        "value": "30 of 30",
+        "detail": "between two Claude agents, one of them blind; no person labelled or reviewed the answers",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/evals/label_audit.md"
+      }
+    ],
+    "ci_runs": [
+      {
+        "started": "2026-10-13T15:27:07Z",
+        "job_seconds": 15,
+        "test_seconds": 7
+      },
+      {
+        "started": "2026-10-13T15:51:55Z",
+        "job_seconds": 22,
+        "test_seconds": 11
+      },
+      {
+        "started": "2026-10-13T16:02:38Z",
+        "job_seconds": 18,
+        "test_seconds": 13
+      },
+      {
+        "started": "2026-10-13T16:35:06Z",
+        "job_seconds": 21,
+        "test_seconds": 14
+      },
+      {
+        "started": "2026-10-13T16:46:59Z",
+        "job_seconds": 54,
+        "test_seconds": 15
+      },
+      {
+        "started": "2026-10-13T16:48:33Z",
+        "job_seconds": 18,
+        "test_seconds": 9
+      },
+      {
+        "started": "2026-10-13T17:01:14Z",
+        "job_seconds": 27,
+        "test_seconds": 13
+      },
+      {
+        "started": "2026-10-13T17:10:13Z",
+        "job_seconds": 34,
+        "test_seconds": 15
+      },
+      {
+        "started": "2026-10-13T17:13:33Z",
+        "job_seconds": 37,
+        "test_seconds": 16
+      },
+      {
+        "started": "2026-10-13T17:18:35Z",
+        "job_seconds": 35,
+        "test_seconds": 14
+      },
+      {
+        "started": "2026-10-13T17:30:00Z",
+        "job_seconds": 41,
+        "test_seconds": 15
+      },
+      {
+        "started": "2026-10-13T18:53:36Z",
+        "job_seconds": 37,
+        "test_seconds": 18
+      },
+      {
+        "started": "2026-10-13T18:54:51Z",
+        "job_seconds": 43,
+        "test_seconds": 24
+      },
+      {
+        "started": "2026-10-13T18:56:41Z",
+        "job_seconds": 54,
+        "test_seconds": 33
+      },
+      {
+        "started": "2026-10-13T18:57:14Z",
+        "job_seconds": 55,
+        "test_seconds": 26
+      },
+      {
+        "started": "2026-10-13T19:41:03Z",
+        "job_seconds": 72,
+        "test_seconds": 36
+      },
+      {
+        "started": "2026-10-13T19:54:45Z",
+        "job_seconds": 68,
+        "test_seconds": 28
+      },
+      {
+        "started": "2026-10-13T20:58:51Z",
+        "job_seconds": 35,
+        "test_seconds": 14
+      },
+      {
+        "started": "2026-10-13T21:02:01Z",
+        "job_seconds": 20,
+        "test_seconds": 12
+      },
+      {
+        "started": "2026-10-13T21:04:19Z",
+        "job_seconds": 117,
+        "test_seconds": 14
+      },
+      {
+        "started": "2026-10-13T21:07:10Z",
+        "job_seconds": 24,
+        "test_seconds": 10
+      },
+      {
+        "started": "2026-10-13T21:12:10Z",
+        "job_seconds": 135,
+        "test_seconds": 11
+      },
+      {
+        "started": "2026-10-13T21:16:18Z",
+        "job_seconds": 38,
+        "test_seconds": 17
+      },
+      {
+        "started": "2026-10-13T21:17:53Z",
+        "job_seconds": 38,
+        "test_seconds": 20
+      },
+      {
+        "started": "2026-10-13T21:20:40Z",
+        "job_seconds": 54,
+        "test_seconds": 33
+      },
+      {
+        "started": "2026-10-13T21:23:38Z",
+        "job_seconds": 35,
+        "test_seconds": 21
+      },
+      {
+        "started": "2026-10-13T21:26:32Z",
+        "job_seconds": 70,
+        "test_seconds": 23
+      },
+      {
+        "started": "2026-10-13T21:28:40Z",
+        "job_seconds": 51,
+        "test_seconds": 20
+      },
+      {
+        "started": "2026-10-13T21:42:51Z",
+        "job_seconds": 66,
+        "test_seconds": 40
+      },
+      {
+        "started": "2026-10-13T21:54:17Z",
+        "job_seconds": 76,
+        "test_seconds": 42
+      },
+      {
+        "started": "2026-10-13T22:05:41Z",
+        "job_seconds": 76,
+        "test_seconds": 41
+      },
+      {
+        "started": "2026-10-13T22:06:12Z",
+        "job_seconds": 68,
+        "test_seconds": 40
+      },
+      {
+        "started": "2026-10-13T22:35:13Z",
+        "job_seconds": 54,
+        "test_seconds": 28
+      },
+      {
+        "started": "2026-10-14T12:00:28Z",
+        "job_seconds": 75,
+        "test_seconds": 41
+      },
+      {
+        "started": "2026-10-14T12:19:47Z",
+        "job_seconds": 76,
+        "test_seconds": 41
+      },
+      {
+        "started": "2026-10-14T13:10:40Z",
+        "job_seconds": 67,
+        "test_seconds": 33
+      }
+    ],
+    "gates": [
+      {
+        "gate": "Actions pinned to a full commit SHA",
+        "status": "18 of 18",
+        "source": "https://github.com/ranaidrees/answer-scorer/tree/main/.github/workflows"
+      },
+      {
+        "gate": "Ruleset on main: required checks, empty bypass list",
+        "status": "active; required checks ci, evals; bypass list empty",
+        "source": "https://github.com/ranaidrees/answer-scorer/rules"
+      },
+      {
+        "gate": "CodeQL default setup",
+        "status": "configured; actions, python",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/github-code-scanning/codeql"
+      },
+      {
+        "gate": "Secret scan of the full history in ci (gitleaks)",
+        "status": "present",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/ci.yml"
+      },
+      {
+        "gate": "Secret scanning with push protection",
+        "status": "secret scanning enabled; push protection enabled",
+        "source": "https://github.com/ranaidrees/answer-scorer/security"
+      },
+      {
+        "gate": "Dependabot version updates",
+        "status": "github-actions, docker",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/dependabot.yml"
+      },
+      {
+        "gate": "Signed build provenance verified before every deploy",
+        "status": "yes",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/deploy.yml"
+      }
+    ]
+  },
+  "in_production": {
+    "figures": [
+      {
+        "measure": "Deploy runs approved by the owner",
+        "value": "3 of 4",
+        "detail": "of the runs that reached the owner's decision; rejected by the owner: 1; waiting for approval: 1",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml"
+      },
+      {
+        "measure": "Change failure rate",
+        "value": "0 of 3",
+        "detail": "deploys that changed the app and whose smoke test then failed, of all deploys that changed the app",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml"
+      },
+      {
+        "measure": "Time from merge to production",
+        "value": "8 h 58 min",
+        "detail": "#16 merged to its deploy run finishing, for the first successful deploy; includes the wait for the owner's approval",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012"
+      },
+      {
+        "measure": "Rollback route proven",
+        "value": "yes",
+        "detail": "a successful image_sha run: an earlier image redeployed by its commit SHA",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38552927905"
+      },
+      {
+        "measure": "Azure spend estimate",
+        "value": "about 7.0 GBP of 10 GBP",
+        "detail": "estimate from token counts on 14 October 2026, because Azure's own figures lag",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/plan.md"
+      }
+    ],
+    "deploys": [
+      {
+        "started": "2026-10-13T21:28:22Z",
+        "route": "merge of #10",
+        "commit": "9b22d2d",
+        "approved_by_owner": "rejected by owner",
+        "provenance_verified": "not run",
+        "smoke_test": "not run",
+        "result": "failure",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38470856332"
+      },
+      {
+        "started": "2026-10-13T21:30:42Z",
+        "route": "merge of #11",
+        "commit": "97c0661",
+        "approved_by_owner": "not reached",
+        "provenance_verified": "not run",
+        "smoke_test": "not run",
+        "result": "cancelled",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38471159108"
+      },
+      {
+        "started": "2026-10-13T22:02:59Z",
+        "route": "merge of #13",
+        "commit": "fd42d02",
+        "approved_by_owner": "not reached",
+        "provenance_verified": "not run",
+        "smoke_test": "not run",
+        "result": "cancelled",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38475052623"
+      },
+      {
+        "started": "2026-10-13T22:46:18Z",
+        "route": "merge of #16",
+        "commit": "cc949e0",
+        "approved_by_owner": "yes",
+        "provenance_verified": "passed",
+        "smoke_test": "passed",
+        "result": "success",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012"
+      },
+      {
+        "started": "2026-10-14T10:52:40Z",
+        "route": "warm (min replicas 1)",
+        "commit": "cc949e0",
+        "approved_by_owner": "yes",
+        "provenance_verified": "skipped",
+        "smoke_test": "skipped",
+        "result": "success",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38552626830"
+      },
+      {
+        "started": "2026-10-14T10:55:15Z",
+        "route": "rollback route (image_sha)",
+        "commit": "cc949e0",
+        "approved_by_owner": "yes",
+        "provenance_verified": "passed",
+        "smoke_test": "passed",
+        "result": "success",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38552927905"
+      },
+      {
+        "started": "2026-10-14T13:12:13Z",
+        "route": "merge of #19",
+        "commit": "6c9cac4",
+        "approved_by_owner": "not reached",
+        "provenance_verified": "not run",
+        "smoke_test": "not run",
+        "result": "waiting",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38569837382"
+      }
+    ]
+  },
+  "ai_native_sdlc": {
+    "figures": [
+      {
+        "measure": "Commits with the agent's co-author line",
+        "value": "51 of 62",
+        "detail": "commits on the branches of merged pull requests, counted once each, whose message carries Co-Authored-By: Claude",
+        "source": "https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged"
+      },
+      {
+        "measure": "Decisions made by the owner",
+        "value": "21 of 175",
+        "detail": "rows of the decision record whose Who is the owner alone; 7 more name two of owner, agent and rule",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md"
+      },
+      {
+        "measure": "Deploy approvals by the owner",
+        "value": "3",
+        "detail": "approvals of the demo environment by the owner, of 3 in all; rejected by the owner: 1",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml"
+      },
+      {
+        "measure": "Verifier FAIL verdicts before merge",
+        "value": "12",
+        "detail": "6 up to #16, 4 on the Phase 3 records and 2 on the dashboard and LLMOps branch, each corrected before merge",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard"
+      },
+      {
+        "measure": "Important review findings, all fixed",
+        "value": "15",
+        "detail": "found by the in-session reviews before merge; the fixes for the S4b and S5a ones were merged with #13",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard"
+      },
+      {
+        "measure": "First commit to first deploy",
+        "value": "22 h 57 min",
+        "detail": "first commit on main to the first successful deploy run finishing",
+        "source": "https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012"
+      }
+    ],
+    "stages": [
+      {
+        "stage": "Plan",
+        "artifact": "intent/intent.md",
+        "gate": "the owner commits it (who decides: owner)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/intent.md"
+      },
+      {
+        "stage": "Design",
+        "artifact": "intent/spec.md and rubrics/*.yaml",
+        "gate": "validation session, independent rubric check and Claude review (who decides: owner, and a rule for the rubric check)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/spec.md"
+      },
+      {
+        "stage": "Build",
+        "artifact": "intent/plan.md slice sections, code and tests",
+        "gate": "plan reviewed before code, verifier PASS and ci green (who decides: agent and rule)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/plan.md"
+      },
+      {
+        "stage": "Test",
+        "artifact": "eval reports, label audit and stability proof",
+        "gate": "eval gate at the spec's thresholds or stricter; loosening needs the owner (who decides: rule)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/docs/eval_card.md"
+      },
+      {
+        "stage": "Deploy",
+        "artifact": "pull request with AI review findings, and the GitHub deployment record",
+        "gate": "required checks before merge; the owner approves every production deploy (who decides: owner)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/deploy.yml"
+      },
+      {
+        "stage": "Maintain",
+        "artifact": "nightly eval run; the Maintain loop is Later",
+        "gate": "a GitHub notification to the owner (who decides: owner)",
+        "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/evals.yml"
+      }
+    ],
+    "decisions_by_who": [
+      {
+        "who": "agent",
+        "decisions": 143
+      },
+      {
+        "who": "owner",
+        "decisions": 21
+      },
+      {
+        "who": "rule",
+        "decisions": 4
+      },
+      {
+        "who": "shared",
+        "decisions": 7
+      }
+    ]
+  }
+}
