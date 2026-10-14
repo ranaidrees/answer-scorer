@@ -31,6 +31,8 @@ TILE_QUERIES = (
     "tile2_review_rate_over_time",
     "tile3_tokens_cost",
     "tile4_eval_runs",
+    "tile5_drift_by_day",
+    "tile6_requests_to_look_at",
 )
 ALERT_QUERIES = ("alert_latency_p95", "alert_availability")
 REVIEW_REASONS = (
@@ -94,7 +96,14 @@ def test_there_is_one_named_and_commented_query_per_tile_and_per_alert():
     for name, query in queries.items():
         assert len(query["comment"]) > 80, f"{name} needs a comment that explains it"
         assert query["text"], name
-    assert {name[:5] for name in TILE_QUERIES} == {"tile1", "tile2", "tile3", "tile4"}
+    assert {name[:5] for name in TILE_QUERIES} == {
+        "tile1",
+        "tile2",
+        "tile3",
+        "tile4",
+        "tile5",
+        "tile6",
+    }
 
 
 def test_no_query_sets_its_own_time_range():
@@ -200,6 +209,28 @@ def test_cost_per_score_is_averaged_over_requests_that_have_a_score():
     assert "avg(" not in text.replace("avgif(", "")
 
 
+def test_the_drift_tile_compares_each_scored_day_with_the_first_day_of_the_range():
+    text = load_queries()["tile5_drift_by_day"]["text"]
+    # Scored requests only, one row per day, against the first day the caller's range holds.
+    assert 'isnotempty(tostring(customDimensions["scorer.score"]))' in text
+    assert "bin(timestamp, 1d)" in text
+    assert "min(day)" in text and "mean_score - base_mean" in text
+    # The distribution, the input length and the two flags it follows, as shares of scores.
+    for column in ("low_1_2_pct", "mid_3_pct", "high_4_5_pct", "median_input_chars"):
+        assert column in text, column
+    for reason in ("injection_detected", "off_topic"):
+        assert f'"{reason}"' in text, reason
+    assert "/ scores" in text, "rates are shares of the day's scored requests"
+
+
+def test_the_requests_tile_lists_metadata_with_the_trace_id_and_puts_tripped_controls_first():
+    text = load_queries()["tile6_requests_to_look_at"]["text"]
+    assert "trace_id = operation_Id" in text
+    assert 'set_difference(reason_list, dynamic(["adverse_score"]))' in text
+    assert "order by look_first desc, timestamp desc" in text and "take 50" in text
+    assert "pipeline_s > 6.0" in text
+
+
 # --- infra/workbook.json -------------------------------------------------------------------
 
 
@@ -238,8 +269,10 @@ def test_every_tile_has_a_title_that_says_what_it_is_and_cost_is_called_an_estim
     headings = " ".join(
         item["content"]["json"] for item in workbook()["items"] if item["type"] == 1
     )
-    for number in ("## 1.", "## 2.", "## 3.", "## 4."):
+    for number in ("## 1.", "## 2.", "## 3.", "## 4.", "## 5.", "## 6."):
         assert number in headings
+    assert "drift" in titles[6].lower() and "no labels" in titles[6]
+    assert "trace id" in titles[7]
     assert "15% CI gate" in headings and "25% band for live traffic" in headings
     assert "No candidate text" in headings
 
