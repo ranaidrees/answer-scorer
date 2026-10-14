@@ -32,7 +32,7 @@ Commands the verifier ran: `uv run poe check` ("All checks passed!", "90 files a
 | Pull requests with AI review findings and verifier verdicts | MET (live, 14 October) | They are comments on the pull requests. For example, `claude[bot]` posted "Review against REVIEW.md" on #4 (decision P3-4), and its review on #15 rates two findings Important. Decisions D13, D17, D18 and D25 corroborate |
 | A decisions log that says who or what made each decision | MET | `intent/decisions.md`: every row has a Who value |
 | The owner's approval before each deploy | MET (live, 14 October) | The first deploy, the `deploy` run for #16, waited on the `demo` environment and was approved by the owner; GitHub's approvals record for the run names the owner. Its provenance check ran before any change (decision P3-2). Of the older runs, the owner rejected the one queued by #10, and the ones queued by #11 and #13 were cancelled; none of them deployed |
-| The walkthrough in eight minutes, with a five-minute cut and screenshots as a fallback | PENDING LIVE | `docs/walkthrough.md` has the script, the cut and a fallback per step. Two screenshots of GitHub pages are committed so far; the rest wait for the owner (the demo token for the live app, a sign-in for the portal), and the rehearsal is the owner's (plan H4). See `docs/screenshots/README.md` |
+| The walkthrough in eight minutes, with a five-minute cut and screenshots as a fallback | PENDING LIVE | `docs/walkthrough.md` has the script, the cut and a fallback per step. Four screenshots of GitHub pages are committed so far; the rest wait for the owner (the demo token for the live app, a sign-in for the portal), and the rehearsal is the owner's (plan H4). See `docs/screenshots/README.md` |
 
 ## Functional requirements
 

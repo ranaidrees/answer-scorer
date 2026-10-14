@@ -1,6 +1,6 @@
 # Screenshots
 
-The fallback pictures for the [walkthrough](../walkthrough.md), one per step. The application is deployed (14 October). Pictures of GitHub pages were taken by the lead session as a visitor who is not signed in, in a browser with a fresh profile, so they show what the public sees: GitHub shows the merge box of a pull request only to signed-in users, so `07-weak-prompt-pr.png` shows the gate's own comment instead. Every file not yet in this folder is pending live.
+The fallback pictures for the [walkthrough](../walkthrough.md), one per step. The application is deployed (14 October). Pictures of GitHub pages were taken by the lead session as a visitor who is not signed in, in a browser with a fresh profile, so they show what the public sees: GitHub shows the merge box of a pull request only to signed-in users, so `07-weak-prompt-pr.png` shows the gate's own comment instead. Profile pictures are hidden in every picture. Every file not yet in this folder is pending live.
 
 | File | Shows | Walkthrough step | Taken by | State |
 |---|---|---|---|---|
@@ -11,8 +11,8 @@ The fallback pictures for the [walkthrough](../walkthrough.md), one per step. Th
 | `05-foundry-deployment.png` | The `scorer-mini` deployment: pinned version, no automatic upgrade, guardrail | 3 | Owner (portal) | Pending live |
 | `06-appinsights-trace.png` | One `score` span with its `scorer.*` properties and no answer text | 3 | Owner (portal) | Pending live |
 | `07-weak-prompt-pr.png` | The weak-prompt pull request: the comment the required `evals` check posted, "Eval gate: FAIL", with every metric and the three it breached | 4 | Lead | 14 October 2026 |
-| `08-ci-run.png` | One `ci` run with its steps | 5 | Lead or owner | Pending live |
-| `09-deploy-approval.png` | The deploy run: provenance verified, and the owner named as approver | 5 | Owner | Pending live |
+| `08-ci-run.png` | One `ci` run, the one on #16, green. GitHub shows a run's steps only to signed-in users, so the steps are on the run's page, not in the picture | 5 | Lead | 14 October 2026 |
+| `09-deploy-approval.png` | The first deploy run (for #16): both jobs green, and "Deployment protection rules" naming the owner as approver of `demo`. The provenance step is inside the `deploy` job's log | 5 | Lead | 14 October 2026 |
 | `10-dashboard.png` | The workbook's four tiles with data | 6 | Owner (portal) | Pending live |
 | `11-pull-requests.png` | The pull request list with each one's check results (the verifier verdicts and review findings are comments inside each pull request) | 7 | Lead | 14 October 2026 |
 

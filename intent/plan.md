@@ -264,7 +264,7 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 
 **Open by design:** #15, the weak-prompt demonstration. `ci` passes, the required `evals` check fails (ungrounded quotes 334 of 334, control-triggered review rate 30 of 30, edge cases 5 of 6) and GitHub reports the merge as blocked. It is never merged.
 
-**This branch (`s5b-phase3`, S5b and the Phase 3 records):** decisions P3-1 to P3-4; the demo pack brought up to date with the deployed app's figures; the pending-live items of `docs/verification.md` re-checked; screenshots `07` and `11`. **Next:** the owner's dispatches of the `warm` and `image_sha` routes, the remaining screenshots, then H4.
+**This branch (`s5b-phase3`, S5b and the Phase 3 records):** decisions P3-1 to P3-4; the demo pack brought up to date with the deployed app's figures; the pending-live items of `docs/verification.md` re-checked; screenshots `07`, `08`, `09` and `11`, with profile pictures hidden. **Next:** the owner's dispatches of the `warm` and `image_sha` routes, the remaining screenshots, then H4.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt has passed nine of its ten full runs.
 
@@ -288,7 +288,7 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 - **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind all four tiles return that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
 - **The test alert has not reached email.** The address on action group `ag-answer-scorer-email` is the Azure sign-in address. It needs Azure's one-time passcode, which expires 30 minutes after the group is saved; the portal's Resend button sends a new one.
 - **The deployed availability alert and workbook** hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
-- **Screenshots** `01` to `06`, `08`, `09` and `10`: see "Needs owner".
+- **Screenshots** `02` to `06` and `10`: see "Needs owner". `01` is retaken by the lead after this branch merges, so that it shows the updated README.
 - **The `warm` and `image_sha` routes** have not run (decision P3-3).
 - **CodeQL default setup** is not on (see "Needs owner").
 
@@ -298,15 +298,14 @@ Done by the owner on 14 October: the `ghcr.io` package made public, the run for 
 
 1. **Dispatch the two remaining deploy routes and approve each** (decision P3-3). First `gh workflow run deploy.yml --ref main -f warm=true`. Then, after it finishes, `gh workflow run deploy.yml --ref main -f image_sha=` followed by the full SHA of `main` at #16.
 2. **Live app screenshots `02` to `04`.** Either type the demo token into a window the lead opens (the lead never reads or types it, and a script then scores the three samples), or take them yourself.
-3. **Portal screenshots** `05-foundry-deployment.png`, `06-appinsights-trace.png` and `10-dashboard.png`, which need your sign-in.
-4. **Screenshots `08` and `09`** show your GitHub avatar: commit them as they are, or have them cropped.
-5. **Alert email.** Enter Azure's passcode for the sign-in address on action group `ag-answer-scorer-email` (Resend in the portal), then say whether the lead sends one test notification.
-6. **CodeQL default setup.** Auto mode denied the one `gh api` call that switches it on (a repository setting), and it was not retried. Switch it on in Settings, Code security, or tell the lead to try once.
-7. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
-8. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
-9. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
+3. **Portal screenshots** `05-foundry-deployment.png`, `06-appinsights-trace.png` and `10-dashboard.png`, which need your sign-in. They can wait for H4.
+4. **Alert email.** Enter Azure's passcode for the sign-in address on action group `ag-answer-scorer-email` (Resend in the portal), then say whether the lead sends one test notification.
+5. **CodeQL default setup.** Auto mode denied the one `gh api` call that switches it on (a repository setting), and it was not retried. Switch it on in Settings, Code security, or tell the lead to try once.
+6. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
+7. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
+8. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
 
-**Denied actions, for the record (none retried in another form, none worked round):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting in item 6; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
+**Denied actions, for the record (none retried in another form, none worked round):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting in item 5; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
 - the lead's dispatch of the `warm` route (item 1), denied as a production deploy;
 - one `uv run poe check` piped into `tail`, denied as weakening security; the exact allowed command then ran;
 - one read-only `sed` and `grep` over `pyproject.toml` and two scripts, denied as a production deploy straight after the dispatch; the same lines were then read with the file tools.
