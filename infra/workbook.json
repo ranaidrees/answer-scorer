@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# Answer scorer dashboard\n\nFour tiles for the scoring service: requests and latency, the human-review rate by reason, tokens and estimated cost, and eval results per run. Everything here is metadata: counts, flags, timings and identifiers. No candidate text is recorded, so none can be shown.\n\nThe queries are kept in `dashboards/queries.kql` in the repository, and the SLOs are described in `docs/slo.md`."
+        "json": "# Answer scorer dashboard\n\nFive tiles for the scoring service: requests and latency, the human-review rate by reason, tokens and estimated cost, eval results per run, and live drift by day. Everything here is metadata: counts, flags, timings and identifiers. No candidate text is recorded, so none can be shown.\n\nThe queries are kept in `dashboards/queries.kql` in the repository, and the SLOs are described in `docs/slo.md`."
       },
       "name": "introduction"
     },
@@ -194,6 +194,28 @@
         "visualization": "table"
       },
       "name": "tile 4 table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 5. Live drift by day\n\nOne row per day of scored requests: the score distribution, the mean score, the median answer length, and the injection and off-topic rates, with the change in mean score and median length against the first day in the time range. Live answers have no labels, so this shows that inputs or outputs have moved, not that scores became wrong; the nightly eval on tile 4 is the check against labels. Read the `scores` column first: a quiet day moves a lot."
+      },
+      "name": "tile 5 heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let scored = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | where isnotempty(tostring(customDimensions[\"scorer.score\"]))\n    | extend\n        day = bin(timestamp, 1d),\n        score = toint(customDimensions[\"scorer.score\"]),\n        input_chars = toint(customDimensions[\"scorer.input_chars\"]),\n        reasons_text = tostring(customDimensions[\"scorer.review_reasons\"])\n    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, \",\"));\nlet daily = scored\n    | summarize\n        scores = count(),\n        mean_score = avg(score),\n        low_1_2 = countif(score <= 2),\n        mid_3 = countif(score == 3),\n        high_4_5 = countif(score >= 4),\n        median_input_chars = percentile(input_chars, 50),\n        injection = countif(array_index_of(reason_list, \"injection_detected\") >= 0),\n        off_topic = countif(array_index_of(reason_list, \"off_topic\") >= 0)\n        by day;\nlet first_day = toscalar(daily | summarize min(day));\nlet baseline = daily\n    | where day == first_day\n    | project join_key = 1, base_mean = mean_score, base_chars = median_input_chars;\ndaily\n| extend join_key = 1\n| join kind=inner baseline on join_key\n| project\n    day,\n    scores,\n    mean_score = round(mean_score, 2),\n    mean_score_change = round(mean_score - base_mean, 2),\n    low_1_2_pct = round(100.0 * low_1_2 / scores, 1),\n    mid_3_pct = round(100.0 * mid_3 / scores, 1),\n    high_4_5_pct = round(100.0 * high_4_5 / scores, 1),\n    median_input_chars,\n    median_chars_change = median_input_chars - base_chars,\n    injection_pct = round(100.0 * injection / scores, 1),\n    off_topic_pct = round(100.0 * off_topic / scores, 1)\n| order by day asc",
+        "size": 3,
+        "title": "Live drift by day: score distribution, mean score, answer length and flag rates against the first day (no labels online)",
+        "noDataMessage": "No scored request in this time range. Widen the time range to cover at least two days of traffic.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "name": "tile 5 table"
     }
   ],
   "styleSettings": {},

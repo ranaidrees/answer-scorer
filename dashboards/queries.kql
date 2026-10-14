@@ -209,6 +209,55 @@ customEvents
     model_calls = tolong(customDimensions["model_calls"])
 | order by timestamp desc
 
+// name: tile5_drift_by_day
+// Tile 5, table. Live drift, without labels: one row per day of scored requests, with the
+// score distribution, the mean score, the median answer length and the injection and
+// off-topic rates, and the change in mean score and median length against the first day
+// in the time range. No label exists for a live answer, so this cannot show that scores
+// became wrong; it shows that what comes in, or what the model gives back, has moved.
+// The nightly eval on tile 4 is the check against labels. A day with few requests moves a
+// lot, so read the `scores` column first.
+let scored = dependencies
+    | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+    | where isnotempty(tostring(customDimensions["scorer.score"]))
+    | extend
+        day = bin(timestamp, 1d),
+        score = toint(customDimensions["scorer.score"]),
+        input_chars = toint(customDimensions["scorer.input_chars"]),
+        reasons_text = tostring(customDimensions["scorer.review_reasons"])
+    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, ","));
+let daily = scored
+    | summarize
+        scores = count(),
+        mean_score = avg(score),
+        low_1_2 = countif(score <= 2),
+        mid_3 = countif(score == 3),
+        high_4_5 = countif(score >= 4),
+        median_input_chars = percentile(input_chars, 50),
+        injection = countif(array_index_of(reason_list, "injection_detected") >= 0),
+        off_topic = countif(array_index_of(reason_list, "off_topic") >= 0)
+        by day;
+let first_day = toscalar(daily | summarize min(day));
+let baseline = daily
+    | where day == first_day
+    | project join_key = 1, base_mean = mean_score, base_chars = median_input_chars;
+daily
+| extend join_key = 1
+| join kind=inner baseline on join_key
+| project
+    day,
+    scores,
+    mean_score = round(mean_score, 2),
+    mean_score_change = round(mean_score - base_mean, 2),
+    low_1_2_pct = round(100.0 * low_1_2 / scores, 1),
+    mid_3_pct = round(100.0 * mid_3 / scores, 1),
+    high_4_5_pct = round(100.0 * high_4_5 / scores, 1),
+    median_input_chars,
+    median_chars_change = median_input_chars - base_chars,
+    injection_pct = round(100.0 * injection / scores, 1),
+    off_topic_pct = round(100.0 * off_topic / scores, 1)
+| order by day asc
+
 // name: alert_latency_p95
 // Alert "p95 latency over 6 s". The rule runs this over a 15-minute window and fires
 // when it returns a row. It returns a row only when the p95 of completed requests in the
