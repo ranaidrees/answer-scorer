@@ -97,7 +97,7 @@ An AI coding agent, Claude Code, wrote everything that came after the intent, th
 
 - Made: the [intent](intent/intent.md), and the 21 design decisions C1 to C21 in [the spec](intent/spec.md), section 13. In the build session on 13 October: switching on email privacy for the account and asking for the stack to be merged (decision D19), and accepting decision S4c-8, under which the unit tests follow the registry's active prompt instead of pinning `v1` (decision S4c-14).
 - On 14 October: making the container image public; approving the first deploy (the run for #16) and rejecting an older run that would have stopped at sign-in; dispatching and approving the `warm` and `image_sha` routes (decision P3-6); switching CodeQL default setup on; and confirming the alert email address (decision P3-7).
-- Still to make: approving every later deploy; applying the observability deployment that puts dashboard tiles 5 and 6 into the live workbook; any loosening of a threshold (none has been asked for); and the final acceptance.
+- Still to make: approving every later deploy; applying the observability deployment that puts dashboard tiles 5 and 6 into the live workbook; deleting the branch of closed pull request #1, if wanted; any loosening of a threshold (none has been asked for); and the final acceptance.
 
 **What no person has reviewed**
 
