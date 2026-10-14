@@ -82,11 +82,13 @@ A gate that flakes gets ignored, so the gate must give the same answer three tim
 | 3 | `20261013T203628Z` | PASS | 0.926 | 29 of 30 | 25 of 30 | Proof 3 |
 | After the proof | CI, pull request #13, commit `01cb892` | PASS | 0.865 | 27 of 30 | 25 of 30 | Ninth run. Within-1 agreement and the dialect and verbosity mean both exactly on their limits |
 | After the proof | CI, pull request #13, commit `814fc6d` | PASS | 0.874 | 28 of 30 | not recorded here | Tenth run. Nothing breached |
+| After the proof | CI, pull request #16, commit `68f87e9` | PASS | 0.916 | 29 of 30 | 24 of 30 | Eleventh run, from the `eval_run` event. Nothing breached |
+| After the proof | Nightly, 14 October, commit `cc949e0` | PASS | 0.902 | 29 of 30 | 23 of 30 | Twelfth run and the first nightly one, from the `eval_run` event. Nothing breached; 0 of 333 quotes ungrounded |
 
 - **Attempt 1: pass, pass, fail.** The failing case was the `dev` edge case whose answer only repeats the question. The model gave runs of 2, 1, 2 and did not mark it off topic, where the expected behaviour is off topic or a score of 1. In the two earlier runs the same case scored 1. The gate was right to fail: the behaviour depended on model noise.
 - **The fix was a control, not a looser check** (decision S4c-3). A deterministic question-echo check, `src/scorer/echo.py`: when fewer than 35% of an answer's words are words the question does not contain, the answer is flagged off topic and routed, whatever the model says. On `dev` data the restated question sits at 19% and every real answer is above 60%.
 - **Attempt 2: one pass, then a stopped run.** The model was unavailable on one input, so the runner stopped with no report and no invented score. That is not a gate result, but in CI it would have failed the check. The fix is the bounded retry described under "Inference settings" (decision S4c-6).
-- **Attempt 3: three consecutive passes on one commit, after the last code change.** Only these three count as the proof (decision S4c-7). The baseline in CI is a fourth passing run on the same prompt at an earlier commit, and the two CI gate runs on pull request #13 are later ones. Overall the accepted prompt passed nine of its ten completed live runs; the one failure is the third run of attempt 1.
+- **Attempt 3: three consecutive passes on one commit, after the last code change.** Only these three count as the proof (decision S4c-7). The baseline in CI is a fourth passing run on the same prompt at an earlier commit, and the CI gate runs on pull requests #13 and #16 and the first nightly run are later ones. Overall the accepted prompt passed eleven of its twelve completed live runs; the one failure is the third run of attempt 1.
 
 **On the weakened prompt: three full local runs in a row on one commit, and the gate failed all three** (decision S4c-11).
 

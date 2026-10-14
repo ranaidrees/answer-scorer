@@ -230,7 +230,18 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Tuesday 13 October 2026, 23:50 (end of Phase 2. A second lead session took over from the first; the owner was present, asked for the stack to be merged and accepted decision S4c-8).
+Last updated: Wednesday 14 October 2026, mid-morning (Phase 3, in progress, on branch `s5b-phase3`).
+
+**Phase 3 so far.**
+- **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
+- **Hooks proven live** in this fresh session (decision P3-1).
+- **Live traffic** of both profiles: 42 of 42 requests returned 200, and 9 of 9 injected answers were flagged and routed.
+- **Dashboard.** The four tile queries return the deployed app's data.
+- **Verification.** Every pending-live item was re-checked (`docs/verification.md`).
+- **Not done.** The `warm=true` and `image_sha` dispatches: auto mode denied the lead's dispatch as a production deploy (decision P3-3), so the owner runs them.
+- **Screenshots.** The live app needs the owner to type the demo token in the window; the portal ones need the owner's sign-in.
+
+**Phase 2 record.** The rest of this section was written at the end of Phase 2 (Tuesday 13 October, 23:50), and is corrected below where Phase 3 changed it. A second lead session took over from the first; the owner was present, asked for the stack to be merged and accepted decision S4c-8.
 
 **Merged to `main`, in this order, each a squash merge with the owner's no-reply address as author:**
 
@@ -247,12 +258,13 @@ Last updated: Tuesday 13 October 2026, 23:50 (end of Phase 2. A second lead sess
 | 10 | S5a Dockerfile and deploy workflow | merged with one finding open; fixed in #13. Its merge queued a deploy run that must not be approved |
 | 11 | S6 observability | merged with one record finding open; the Status in #13 was that record |
 | 13 | S4c baseline, stability proof and the review fixes for S3, S4b and S5a | verifier PASS; live `evals` gate PASS twice; the one Important finding (S4c-8) accepted by the owner (S4c-14) |
+| 16 | S8 demo pack, final verification and the FR-2 start-up fix | live `evals` gate PASS; its merge queued the first deploy, which the owner approved on 14 October |
 
 Pull request #1 is still open for the owner to close. #3 is closed, not merged. Dependabot opened #14 (a base image bump to a release candidate); it is open and untouched, for the owner.
 
 **Open by design:** #15, the weak-prompt demonstration. `ci` passes, the required `evals` check fails (ungrounded quotes 334 of 334, control-triggered review rate 30 of 30, edge cases 5 of 6) and GitHub reports the merge as blocked. It is never merged.
 
-**This branch (`s8-demo-pack`, S8):** the README with its scoreboard, the governance note, the eval card, the walkthrough, the screenshot list (no screenshot taken yet) and the final verification checklist in `docs/verification.md`. **Next:** Phase 3 (deploy, live proof of the hooks, screenshots, the owner's acceptance).
+**This branch (`s5b-phase3`, S5b and the Phase 3 records):** decisions P3-1 to P3-4; the demo pack brought up to date with the deployed app's figures; the pending-live items of `docs/verification.md` re-checked; screenshots `07` and `11`. **Next:** the owner's dispatches of the `warm` and `image_sha` routes, the remaining screenshots, then H4.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt has passed nine of its ten full runs.
 
@@ -266,34 +278,43 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 
 **CI Claude review:** live since #12 merged. It has reviewed #4 to #11 except #7. One of its findings is not accepted: it called the workflow-level `cache-mode` key invalid, but the key exists (decision D5).
 
-**Hooks:** proven by unit tests (decision D11). They also loaded in the build sessions, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The verifier returned FAIL on S0 three times for fail-open shapes in the gate; each was fixed with tests (decisions D13, D17, D18). The full live proof in a fresh session stays a Phase 3 step.
+**Hooks:** proven by unit tests (decision D11). They also loaded in the build sessions, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The verifier returned FAIL on S0 three times for fail-open shapes in the gate; each was fixed with tests (decisions D13, D17, D18). **Proven live on 14 October in a fresh session (decision P3-1):** `azd up` and `az group delete` denied by the gate with its reason, in Bash and in PowerShell; `uv run poe check` green with 1760 tests; both MCP servers answering; the format hook firing on a written file.
 
-**Model spend estimate (from token counts; Azure's own figures lag): about 6 GBP.** Proof and smoke calls 0.05; the CI baseline run 0.43; seven full local runs on `v1` and one that stopped early 3.04; three weak-prompt runs 0.99; one duplicate weak run started by mistake by the second lead and stopped at about 20 of 92 inputs, about 0.08. Dashboard traffic from the local app, 42 requests, 0.19; two CI gate runs on #13, about 0.86; one CI gate run on #15, 0.33. Phase 3 is estimated at 1 GBP. **One nightly run costs about 0.43 GBP.** The estimate was under 7 GBP when the proof was done, so the nightly schedule stays in `evals.yml`; at that price about seven nights fit under the 10 GBP limit after Phase 3 and the owner should switch the schedule off after the walkthrough (see "Needs owner").
+**Model spend estimate on 14 October (from token counts; Azure's own figures lag): about 7.0 GBP.** Added since Phase 2: the CI gate run on #16, 0.42; the first nightly run, 0.42 (PASS); the deploy's smoke test and the live traffic, 45 scores, 0.21. A warm replica (the owner's `warm=true` dispatch) idles inside Container Apps' free monthly allowance for about four days (180,000 vCPU-seconds and 360,000 GiB-seconds a month against 0.5 vCPU and 1 GiB; https://learn.microsoft.com/azure/container-apps/billing), then at the idle rate; it goes back to 0 after the walkthrough. **Phase 2 figure, as written then: about 6 GBP.** Proof and smoke calls 0.05; the CI baseline run 0.43; seven full local runs on `v1` and one that stopped early 3.04; three weak-prompt runs 0.99; one duplicate weak run started by mistake by the second lead and stopped at about 20 of 92 inputs, about 0.08. Dashboard traffic from the local app, 42 requests, 0.19; two CI gate runs on #13, about 0.86; one CI gate run on #15, 0.33. Phase 3 is estimated at 1 GBP. **One nightly run costs about 0.43 GBP.** The estimate was under 7 GBP when the proof was done, so the nightly schedule stays in `evals.yml`; at that price about seven nights fit under the 10 GBP limit after Phase 3 and the owner should switch the schedule off after the walkthrough (see "Needs owner").
 
-**To confirm on the first deploy (Phase 3):** the context part of the OIDC subjects; whether `id-deploy` can update the app with its role scoped to the app only (the role includes a join action on the environment, which that scope does not cover); whether the public `ghcr.io` image pulls without a registry entry.
+**Confirmed on the first deploy (decision P3-2):** the `environment:demo` subject context works; `id-deploy` updates the app with its role scoped to the app only; the public `ghcr.io` image pulls with no registry entry.
 
 **Not met yet:**
-- **Dashboard:** traffic was sent from the local app (42 of 42 requests returned 200). Run with the read-only CLI, the queries behind all four tiles return data: p95 latency 3.3 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 9 of 41 (inside the 25% band, on a mix with a deliberate burst of injected answers), and two CI eval runs. Nobody has looked at the workbook in the portal.
-- The test alert has not reached email: the address on action group `ag-answer-scorer-email` awaits the owner's confirmation.
-- The deployed availability alert and workbook hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
-- Screenshots for the demo pack, and anything that needs the live URL, are pending Phase 3.
-- CodeQL default setup is not on (see "Needs owner").
+- **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind all four tiles return that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
+- **The test alert has not reached email.** The address on action group `ag-answer-scorer-email` is the Azure sign-in address. It needs Azure's one-time passcode, which expires 30 minutes after the group is saved; the portal's Resend button sends a new one.
+- **The deployed availability alert and workbook** hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
+- **Screenshots** `01` to `06`, `08`, `09` and `10`: see "Needs owner".
+- **The `warm` and `image_sha` routes** have not run (decision P3-3).
+- **CodeQL default setup** is not on (see "Needs owner").
 
 **Needs owner (in this order):**
 
-1. **Approve only the newest waiting deploy run, and only after item 2.** The runs queued by the merges of #10 and #11 come from the workflow that still read the deleted variables and would stop at sign-in: do not approve those. The merge of #13 queued a run from the corrected workflow, and the merge of S8 will queue the newest.
-2. **Make the `ghcr.io` package public**, then approve the newest waiting `demo` deployment (Phase 3).
-3. **CodeQL default setup.** Auto mode denied the one `gh api` call that switches it on (a repository setting). It was not retried. Switch it on in Settings, Code security, or tell the lead to.
-4. **Pull request #1.** Close it without merging and delete its branch (decision D20; the reason is in the build report). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
-5. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
-6. **Confirm the alert email address** in the message Azure sent, then the lead re-sends the test notification.
-7. **The nightly eval schedule** costs about 0.43 GBP a night. Switch it off after the walkthrough, or accept the spend.
-8. **If the first deploy is refused for the `id-deploy` role** (see "To confirm"): the spec's fallback is a broader role scoped to the container app, which the agent is not allowed to grant. The owner grants it, or chooses another narrow role.
+Done by the owner on 14 October: the `ghcr.io` package made public, the run for #16 approved (the first deploy), and the run queued by #10 rejected. The `id-deploy` fallback role is not needed (decision P3-2).
 
-**Denied actions, for the record (none retried, none worked round):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting in item 3; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control.
+1. **Dispatch the two remaining deploy routes and approve each** (decision P3-3). First `gh workflow run deploy.yml --ref main -f warm=true`. Then, after it finishes, `gh workflow run deploy.yml --ref main -f image_sha=` followed by the full SHA of `main` at #16.
+2. **Live app screenshots `02` to `04`.** Either type the demo token into a window the lead opens (the lead never reads or types it, and a script then scores the three samples), or take them yourself.
+3. **Portal screenshots** `05-foundry-deployment.png`, `06-appinsights-trace.png` and `10-dashboard.png`, which need your sign-in.
+4. **Screenshots `08` and `09`** show your GitHub avatar: commit them as they are, or have them cropped.
+5. **Alert email.** Enter Azure's passcode for the sign-in address on action group `ag-answer-scorer-email` (Resend in the portal), then say whether the lead sends one test notification.
+6. **CodeQL default setup.** Auto mode denied the one `gh api` call that switches it on (a repository setting), and it was not retried. Switch it on in Settings, Code security, or tell the lead to try once.
+7. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
+8. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
+9. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
+
+**Denied actions, for the record (none retried in another form, none worked round):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting in item 6; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
+- the lead's dispatch of the `warm` route (item 1), denied as a production deploy;
+- one `uv run poe check` piped into `tail`, denied as weakening security; the exact allowed command then ran;
+- one read-only `sed` and `grep` over `pyproject.toml` and two scripts, denied as a production deploy straight after the dispatch; the same lines were then read with the file tools.
 
 ## Deviations
 
+- **Phase 3: the owner dispatches the `warm` and `image_sha` routes**, not the lead, because auto mode denied the lead's dispatch (decision P3-3).
+- **Phase 3: screenshots were taken with Edge driven over its DevTools protocol by a short Node script outside the repository, not with Playwright,** so nothing was installed or downloaded. GitHub pages were taken as a visitor who is not signed in.
 - No separate `plan/wave-N` pull requests in the unattended build (decision D12).
 - Branches are never force pushed, so a pushed branch is brought up to date by merging rather than rebasing (decision D9). Review findings on a branch lower in the stack are fixed on the branch at the top.
 - **The stack was merged late and in one go.** Nothing was merged until the owner turned on email privacy (decision D19). Then #2 to #11 were merged bottom-up in about an hour, each once `ci` passed, with `main` merged into the next branch each time. Each merge was checked to be the branch plus exactly what `main` had gained.
