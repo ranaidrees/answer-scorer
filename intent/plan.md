@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Wednesday 14 October 2026, about 12:30 (Phase 3, on branch `s5b-phase3`). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
+Last updated: Wednesday 14 October 2026, about 13:15 (Phase 3, on branch `s5b-followup`, after #17 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
 
 **Phase 3 so far.**
 - **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
@@ -239,7 +239,7 @@ Last updated: Wednesday 14 October 2026, about 12:30 (Phase 3, on branch `s5b-ph
 - **Dashboard.** The four tile queries return the deployed app's data.
 - **Verification.** Every pending-live item was re-checked (`docs/verification.md`).
 - **Both manual deploy routes proven** (decision P3-6). Auto mode denied the lead's dispatch as a production deploy (decision P3-3), so the owner dispatched `warm=true` and then `image_sha` with the commit of #16, and approved each. The `image_sha` run verified provenance and passed smoke 6 of 6. The app now keeps one warm replica.
-- **Screenshots.** Seven taken: the three live app result cards after the owner saved the demo token in the window, and four GitHub pages. The three portal ones need the owner's sign-in, and `01` is retaken after this branch merges.
+- **Screenshots.** Eight taken: the three live app result cards after the owner saved the demo token in the window, and five GitHub pages. The three portal ones need the owner's sign-in.
 
 **Phase 2 record.** The rest of this section was written at the end of Phase 2 (Tuesday 13 October, 23:50), and is corrected below where Phase 3 changed it. A second lead session took over from the first; the owner was present, asked for the stack to be merged and accepted decision S4c-8.
 
@@ -258,13 +258,16 @@ Last updated: Wednesday 14 October 2026, about 12:30 (Phase 3, on branch `s5b-ph
 | 10 | S5a Dockerfile and deploy workflow | merged with one finding open; fixed in #13. Its merge queued a deploy run that must not be approved |
 | 11 | S6 observability | merged with one record finding open; the Status in #13 was that record |
 | 13 | S4c baseline, stability proof and the review fixes for S3, S4b and S5a | verifier PASS; live `evals` gate PASS twice; the one Important finding (S4c-8) accepted by the owner (S4c-14) |
-| 16 | S8 demo pack, final verification and the FR-2 start-up fix | live `evals` gate PASS; its merge queued the first deploy, which the owner approved on 14 October |
+| 16 | S8 demo pack, final verification and the FR-2 start-up fix | live `evals` gate PASS; verifier PASS at its final commit (decision P3-8); its merge queued the first deploy, which the owner approved on 14 October |
+| 17 | S5b and the Phase 3 records | verifier PASS at `42a9962` after four FAIL verdicts for stale text; CI review: no Important findings, its two nits fixed in the follow-up |
 
 Pull request #1 is still open for the owner to close. #3 is closed, not merged. Dependabot opened #14 (a base image bump to a release candidate); it is open and untouched, for the owner.
 
 **Open by design:** #15, the weak-prompt demonstration. `ci` passes, the required `evals` check fails (ungrounded quotes 334 of 334, control-triggered review rate 30 of 30, edge cases 5 of 6) and GitHub reports the merge as blocked. It is never merged.
 
-**This branch (`s5b-phase3`, S5b and the Phase 3 records):** decisions P3-1 to P3-8; the demo pack brought up to date with the deployed app's figures; the pending-live items of `docs/verification.md` re-checked; screenshots `02`, `03`, `04`, `07`, `08`, `09` and `11`, with profile pictures hidden. **Next:** merge this branch, retake `01`, then H4, in which the owner takes `05`, `06` and `10`.
+**Merged in #17 (S5b and the Phase 3 records):** decisions P3-1 to P3-8; the demo pack brought up to date with the deployed app's figures; the pending-live items of `docs/verification.md` re-checked; screenshots `02`, `03`, `04`, `07`, `08`, `09` and `11`, with profile pictures hidden.
+
+**This branch (`s5b-followup`):** screenshot `01`; the merge count brought to thirteen; the two nits from the CI review of #17 and the optional notes from its last verifier run; decision P3-9. **Next:** H4, in which the owner takes `05`, `06` and `10`.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt had passed nine of its ten full runs at the end of Phase 2; with the CI gate run on #16 and the first nightly run, both PASS, it has passed eleven of its twelve.
 
@@ -287,7 +290,7 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 **Not met yet:**
 - **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind all four tiles return that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
 - **The deployed availability alert and workbook** hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
-- **Screenshots** `05`, `06` and `10`: see "Needs owner". `01` is retaken by the lead after this branch merges, so that it shows the updated README.
+- **Screenshots** `05`, `06` and `10`: see "Needs owner".
 
 **Needs owner (in this order):**
 
@@ -321,5 +324,5 @@ Done by the owner on 14 October: the `ghcr.io` package made public; the run for 
 - **S6: the latency alert only fires when there are at least five requests in its window**, so one slow cold start does not page anyone.
 - **S6: two alert rules cost about 0.75 GBP a month in total.** This is a small fixed charge, against the rule of no fixed charges; it is kept because the spec asks for the alerts, and it is listed here so the owner can remove them after the walkthrough.
 - Three early eval reports cite commit `a6915ca`, which a rebase of the then unpushed branch replaced (decision S4c-13).
-- Screenshots: seven were taken in Phase 3 (`02`, `03`, `04`, `07`, `08`, `09`, `11`); `01` follows the merge of the Phase 3 records, and `05`, `06` and `10` are the owner's.
+- Screenshots: eight were taken in Phase 3 (`01` to `04`, `07`, `08`, `09`, `11`); `05`, `06` and `10` are the owner's.
 - **S8 changed scorer code.** The final verification found that FR-2's start-up validation was missing; the fix (four lines in `src/scorer/api.py` and three tests) is in the S8 pull request although the plan's file list for S8 names documents only (decision S8-9). The verifier then returned FAIL on the demo pack for two statements the reports contradicted; they were corrected (decision S8-10). The CI review rated "not run again" Important; the verifier was then run on the final commit of #16 and returned PASS before the merge (decision P3-8).

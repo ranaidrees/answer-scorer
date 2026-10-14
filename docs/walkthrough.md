@@ -6,12 +6,12 @@ Say once, early: the data is synthetic, every output is decision support, and re
 
 ## Where things stand (14 October 2026)
 
-The application is **deployed**. Twelve pull requests are merged to `main` (#2, #12, #4 to #11, #13 and #16, this demo pack). The first deploy, the run for #16, waited for the owner's approval, verified the image's signed build provenance before changing anything, and passed its smoke test on the live URL. The weak-prompt pull request, #15, is open by design and must not merge. The steps that need the portal are marked **pending live** until the owner has looked at them. The screenshots are listed in [screenshots/README.md](screenshots/README.md).
+The application is **deployed**. Thirteen pull requests are merged to `main` (#2, #12, #4 to #11, #13, #16, this demo pack, and #17, the Phase 3 records). The first deploy, the run for #16, waited for the owner's approval, verified the image's signed build provenance before changing anything, and passed its smoke test on the live URL. The weak-prompt pull request, #15, is open by design and must not merge. The steps that need the portal are marked **pending live** until the owner has looked at them. The screenshots are listed in [screenshots/README.md](screenshots/README.md).
 
 | Tab, left to right | Needs | State |
 |---|---|---|
 | 1. GitHub README | The repository | Ready, with the deployed app's figures |
-| 2. Live app | The live URL and the demo token | Ready. The smoke test and 42 requests of traffic passed on 14 October. Fallback: the same app run locally |
+| 2. Live app | The live URL and the demo token | Ready. On 14 October the deploy's smoke test and 42 requests of traffic, 45 scored requests in all, returned 200. Fallback: the same app run locally |
 | 3. Foundry portal, model deployment | The portal | Pending live (the owner's sign-in) |
 | 4. Application Insights | The portal | Pending live (the owner's sign-in). The live requests' `score` spans are in the telemetry |
 | 5. Weak-prompt pull request | Pull request [#15](https://github.com/ranaidrees/answer-scorer/pull/15) | Ready. Open, `ci` green, `evals` red, merge blocked |
@@ -96,7 +96,7 @@ The page has three sample buttons after "Load a sample:". Each one fills the com
 
 - **Clicks.** Tab 1. Open the `intent` folder: [intent](../intent/intent.md), [spec](../intent/spec.md), [plan](../intent/plan.md). Open the "Pull requests" tab, set the filter to closed pull requests, and open one slice, for example [#7](https://github.com/ranaidrees/answer-scorer/pull/7): show the verifier's verdict and the in-session review findings in its comments. For a review made by the Claude review in CI, open another, for example [#9](https://github.com/ranaidrees/answer-scorer/pull/9). Open [decisions.md](../intent/decisions.md) and point at the last column: agent, rule or owner on every row.
 - **Say.** "Claude Code built it inside gates I designed; I own the intent, the gates and production. That is how I would run AI-native delivery for a team."
-- **Plan wording corrected.** The plan says "PRs with AI review". Two reviews stand behind that. Until #12 merged, an independent subagent reviewed each slice in the build session against `REVIEW.md` and its findings were posted as comments (decision D25). The Claude review in CI has been live since #12 merged: it reviewed #4, #5, #6, #8, #9, #10, #11, #13 (twice), #15 and #16, and it skipped #7 because that diff edits the review workflow itself. Both are reviews by AI agents; do not say a person reviewed the code. The plan also says "built and merged": twelve pull requests are merged, this demo pack's own (#16) among them. The weak-prompt pull request stays open on purpose.
+- **Plan wording corrected.** The plan says "PRs with AI review". Two reviews stand behind that. Until #12 merged, an independent subagent reviewed each slice in the build session against `REVIEW.md` and its findings were posted as comments (decision D25). The Claude review in CI has been live since #12 merged: it reviewed #4, #5, #6, #8, #9, #10, #11, #13 (twice), #15 and #16, and it skipped #7 because that diff edits the review workflow itself. Both are reviews by AI agents; do not say a person reviewed the code. The plan also says "built and merged": thirteen pull requests are merged, this demo pack's own (#16) and the Phase 3 records (#17) among them. The weak-prompt pull request stays open on purpose.
 - **Fallback.** `11-pull-requests.png`, or the "How it was built" table in the [README](../README.md#how-it-was-built).
 
 ### 8. Questions (8:00 to 10:00)

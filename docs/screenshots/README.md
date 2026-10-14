@@ -4,7 +4,7 @@ The fallback pictures for the [walkthrough](../walkthrough.md), one per step. Th
 
 | File | Shows | Walkthrough step | Taken by | State |
 |---|---|---|---|---|
-| `01-readme-scoreboard.png` | The README's results scoreboard with the disclaimer above it | 1 | Lead or owner | Pending live |
+| `01-readme-scoreboard.png` | The README's results scoreboard with its validity statement and the first table, from the heading down. The disclaimer sits just above the heading in the README; the status line between them is left out so that a later merge does not date the picture | 1 | Lead | 14 October 2026 |
 | `02-app-strong.png` | The live app's result card after "Strong answer": 5 / 5, runs 4, 5, 5, four highlighted quotes, no review trigger, the notice | 2 (J1) | Lead, after the owner saved the demo token | 14 October 2026 |
 | `03-app-injection.png` | The live app's result card after "Injection attempt": 2 / 5, runs 2, 2, 2, the two review reasons and "Injection detected: yes" | 2 (J2) | Lead, after the owner saved the demo token | 14 October 2026 |
 | `04-app-weak.png` | The live app's result card after "Weak answer": 1 / 5, a low score sent to a person | 2 (J3) | Lead, after the owner saved the demo token | 14 October 2026 |
