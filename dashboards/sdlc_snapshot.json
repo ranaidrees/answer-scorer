@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14T14:39:12Z",
+  "generated_at": "2026-10-14T14:41:03Z",
   "repository": "ranaidrees/answer-scorer",
   "before_production": {
     "figures": [
@@ -405,8 +405,8 @@
       },
       {
         "measure": "Decisions made by the owner",
-        "value": "21 of 176",
-        "detail": "rows of the decision record whose Who is the owner alone; 7 more name two of owner, agent and rule",
+        "value": "21 of 177",
+        "detail": "rows of the decision record whose Who is the owner alone; 8 more name two of owner, agent and rule",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md"
       },
       {
@@ -487,7 +487,7 @@
       },
       {
         "who": "shared",
-        "decisions": 7
+        "decisions": 8
       }
     ]
   }

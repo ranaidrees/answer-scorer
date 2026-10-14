@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# Answer scorer: delivery evidence\n\nHow the answer scorer was delivered: the gates every change passed before production, every deploy and the live service against its SLOs, and the stages of the AI-native SDLC with who did the work and who decided. Every row links to the page or file it came from, in the public repository.\n\n**Snapshot of 14 October 2026, 14:39 UTC.** The GitHub and repository figures are a snapshot made by [`scripts/sdlc_snapshot.py`](https://github.com/ranaidrees/answer-scorer/blob/main/scripts/sdlc_snapshot.py) and kept in [`dashboards/sdlc_snapshot.json`](https://github.com/ranaidrees/answer-scorer/blob/main/dashboards/sdlc_snapshot.json). It is refreshed by a pull request, never when the page is viewed, so this page calls no outside service and holds no token (decision S9-1 in [`intent/decisions.md`](https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md)). Only the tiles under a **Live** heading read Application Insights.\n\nThe live operational view is the workbook **Answer scorer dashboard**, in the same resource group."
+        "json": "# Answer scorer: delivery evidence\n\nHow the answer scorer was delivered: the gates every change passed before production, every deploy and the live service against its SLOs, and the stages of the AI-native SDLC with who did the work and who decided. Every row links to the page or file it came from, in the public repository.\n\n**Snapshot of 14 October 2026, 14:41 UTC.** The GitHub and repository figures are a snapshot made by [`scripts/sdlc_snapshot.py`](https://github.com/ranaidrees/answer-scorer/blob/main/scripts/sdlc_snapshot.py) and kept in [`dashboards/sdlc_snapshot.json`](https://github.com/ranaidrees/answer-scorer/blob/main/dashboards/sdlc_snapshot.json). It is refreshed by a pull request, never when the page is viewed, so this page calls no outside service and holds no token (decision S9-1 in [`intent/decisions.md`](https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md)). Only the tiles under a **Live** heading read Application Insights.\n\nThe live operational view is the workbook **Answer scorer dashboard**, in the same resource group."
       },
       "name": "introduction"
     },
@@ -105,7 +105,7 @@
     {
       "type": 1,
       "content": {
-        "json": "## Before production\n\nThe gates every change passed before it could reach production: the tests and the `ci` checks, the eval gate and its stability proof, and the supply-chain controls. The chart shows how long each `ci` run took, the whole job and the test step. Snapshot of 14 October 2026, 14:39 UTC."
+        "json": "## Before production\n\nThe gates every change passed before it could reach production: the tests and the `ci` checks, the eval gate and its stability proof, and the supply-chain controls. The chart shows how long each `ci` run took, the whole job and the test step. Snapshot of 14 October 2026, 14:41 UTC."
       },
       "conditionalVisibility": {
         "parameterName": "selectedTab",
@@ -205,7 +205,7 @@
     {
       "type": 1,
       "content": {
-        "json": "**What this tab does not prove.** A passed gate shows that a change met its thresholds on the golden set, not that the scorer is fit for real use. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 14:39 UTC unless the tile or its heading says live.",
+        "json": "**What this tab does not prove.** A passed gate shows that a change met its thresholds on the golden set, not that the scorer is fit for real use. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 14:41 UTC unless the tile or its heading says live.",
         "style": "info"
       },
       "conditionalVisibility": {
@@ -218,7 +218,7 @@
     {
       "type": 1,
       "content": {
-        "json": "## In production\n\nEvery run of the deploy workflow, oldest first: the ones that changed the app, with the owner's approval, the build provenance check and the smoke test, and the ones the owner rejected or that GitHub cancelled while they waited. Then a few figures on how the deploys went. Snapshot of 14 October 2026, 14:39 UTC. Below them, the live service against its SLOs."
+        "json": "## In production\n\nEvery run of the deploy workflow, oldest first: the ones that changed the app, with the owner's approval, the build provenance check and the smoke test, and the ones the owner rejected or that GitHub cancelled while they waited. Then a few figures on how the deploys went. Snapshot of 14 October 2026, 14:41 UTC. Below them, the live service against its SLOs."
       },
       "conditionalVisibility": {
         "parameterName": "selectedTab",
@@ -384,7 +384,7 @@
     {
       "type": 1,
       "content": {
-        "json": "**What this tab does not prove.** A passed smoke test shows that the app answered its sample requests as expected, not that its scores are right, and the live tiles show demo traffic, not real use. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 14:39 UTC unless the tile or its heading says live.",
+        "json": "**What this tab does not prove.** A passed smoke test shows that the app answered its sample requests as expected, not that its scores are right, and the live tiles show demo traffic, not real use. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 14:41 UTC unless the tile or its heading says live.",
         "style": "info"
       },
       "conditionalVisibility": {
@@ -397,7 +397,7 @@
     {
       "type": 1,
       "content": {
-        "json": "## AI-native SDLC\n\nEach stage commits an artifact that the next stage reads, and a gate decides whether the work moves on. The figures show where the agent did the work and where the owner decided, and the chart counts the decisions in [`intent/decisions.md`](https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md) by who made them. Snapshot of 14 October 2026, 14:39 UTC."
+        "json": "## AI-native SDLC\n\nEach stage commits an artifact that the next stage reads, and a gate decides whether the work moves on. The figures show where the agent did the work and where the owner decided, and the chart counts the decisions in [`intent/decisions.md`](https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md) by who made them. Snapshot of 14 October 2026, 14:41 UTC."
       },
       "conditionalVisibility": {
         "parameterName": "selectedTab",
@@ -441,7 +441,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "datatable(measure: string, value: string, detail: string, source: string) [\n    \"Commits with the agent's co-author line\", \"54 of 65\", \"commits on the branches of merged pull requests, counted once each, whose message carries Co-Authored-By: Claude\", \"https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged\",\n    \"Decisions made by the owner\", \"21 of 176\", \"rows of the decision record whose Who is the owner alone; 7 more name two of owner, agent and rule\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md\",\n    \"Deploy approvals by the owner\", \"3\", \"approvals of the demo environment by the owner, of 3 in all; rejected by the owner: 1\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml\",\n    \"Verifier FAIL verdicts before merge\", \"12\", \"6 up to #16, 4 on the Phase 3 records and 2 on the dashboard and LLMOps branch, each corrected before merge\", \"https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard\",\n    \"Important review findings, all fixed\", \"15\", \"found by the in-session reviews before merge; the fixes for the S4b and S5a ones were merged with #13\", \"https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard\",\n    \"First commit to first deploy\", \"22 h 57 min\", \"first commit on main to the first successful deploy run finishing\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012\"\n]",
+        "query": "datatable(measure: string, value: string, detail: string, source: string) [\n    \"Commits with the agent's co-author line\", \"54 of 65\", \"commits on the branches of merged pull requests, counted once each, whose message carries Co-Authored-By: Claude\", \"https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged\",\n    \"Decisions made by the owner\", \"21 of 177\", \"rows of the decision record whose Who is the owner alone; 8 more name two of owner, agent and rule\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md\",\n    \"Deploy approvals by the owner\", \"3\", \"approvals of the demo environment by the owner, of 3 in all; rejected by the owner: 1\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml\",\n    \"Verifier FAIL verdicts before merge\", \"12\", \"6 up to #16, 4 on the Phase 3 records and 2 on the dashboard and LLMOps branch, each corrected before merge\", \"https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard\",\n    \"Important review findings, all fixed\", \"15\", \"found by the in-session reviews before merge; the fixes for the S4b and S5a ones were merged with #13\", \"https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard\",\n    \"First commit to first deploy\", \"22 h 57 min\", \"first commit on main to the first successful deploy run finishing\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012\"\n]",
         "size": 3,
         "title": "AI-native SDLC: figures from the snapshot, each with the page it came from",
         "noDataMessage": "No rows in this snapshot.",
@@ -472,7 +472,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "datatable(who: string, decisions: long) [\n    \"agent\", 144,\n    \"owner\", 21,\n    \"rule\", 4,\n    \"shared\", 7\n]",
+        "query": "datatable(who: string, decisions: long) [\n    \"agent\", 144,\n    \"owner\", 21,\n    \"rule\", 4,\n    \"shared\", 8\n]",
         "size": 3,
         "title": "Decisions recorded in intent/decisions.md, by who made them (snapshot)",
         "noDataMessage": "No rows in this snapshot.",
@@ -491,7 +491,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "datatable(who: string, decisions: long) [\n    \"agent\", 144,\n    \"owner\", 21,\n    \"rule\", 4,\n    \"shared\", 7\n]",
+        "query": "datatable(who: string, decisions: long) [\n    \"agent\", 144,\n    \"owner\", 21,\n    \"rule\", 4,\n    \"shared\", 8\n]",
         "size": 0,
         "title": "Decisions by who made them, as a bar chart (snapshot)",
         "noDataMessage": "No rows in this snapshot.",
@@ -509,7 +509,7 @@
     {
       "type": 1,
       "content": {
-        "json": "**What this tab does not prove.** Counts of commits and decisions show who did the work and who decided, not how good the work was. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 14:39 UTC unless the tile or its heading says live.",
+        "json": "**What this tab does not prove.** Counts of commits and decisions show who did the work and who decided, not how good the work was. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 14:41 UTC unless the tile or its heading says live.",
         "style": "info"
       },
       "conditionalVisibility": {
