@@ -39,7 +39,7 @@ The Container App starts on a placeholder image (`mcr.microsoft.com/k8se/quickst
 
 ## Identities
 
-No key is used for the model or for Azure access. Application Insights receives telemetry with a connection string that holds an instrumentation key, which Microsoft does not treat as a credential; Entra-only ingestion is off, so the string is still kept as a secret ([LLMOps, section 1](llmops.md#1-what-plays-the-part-of-an-llm-observability-tool-such-as-langfuse)). Three user-assigned managed identities, each with one role on one resource:
+Neither the application nor GitHub Actions uses a key: the app reaches the model with a managed identity, the workflows sign in to Azure with OIDC, and key authentication is off on the Foundry resource. Application Insights receives telemetry with a connection string that holds an instrumentation key, which Microsoft does not treat as a credential; Entra-only ingestion is off, so anyone holding the string could send telemetry, and it is an ordinary app setting on the Container App and a secret in GitHub for CI ([LLMOps, section 1](llmops.md#1-what-plays-the-part-of-an-llm-observability-tool-such-as-langfuse)). The Container Apps environment sends container logs to Log Analytics with the workspace shared key, which Bicep reads at deployment time and writes to no file (decision S1-8). Three user-assigned managed identities, each with one role on one resource:
 
 | Identity | Used by | Role | Scope | Created by |
 |---|---|---|---|---|
