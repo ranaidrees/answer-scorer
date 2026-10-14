@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Wednesday 14 October 2026, about 13:59 (Phase 3, on branch `s6b-llmops-drift`, after #18 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
+Last updated: Wednesday 14 October 2026, about 14:42 (Phase 3, on branch `p3-records`, after #19 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
 
 **Phase 3 so far.**
 - **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
@@ -261,8 +261,9 @@ Last updated: Wednesday 14 October 2026, about 13:59 (Phase 3, on branch `s6b-ll
 | 16 | S8 demo pack, final verification and the FR-2 start-up fix | live `evals` gate PASS; verifier PASS at its final commit (decision P3-8); its merge queued the first deploy, which the owner approved on 14 October |
 | 17 | S5b and the Phase 3 records | verifier PASS at `42a9962` after four FAIL verdicts for stale text; CI review: no Important findings, its two nits fixed in the follow-up |
 | 18 | S5b follow-up: screenshot `01`, the merge count after #17, the CI review nits of #17 | verifier PASS; security review and CI review: no Important findings |
+| 19 | S6b: dashboard tiles 5 and 6, a links header, `docs/llmops.md` | verifier PASS after two FAILs; security review: two Important findings, both fixed; CI review: no Important findings. The observability deployment that makes the tiles live is the owner's |
 
-Pull request #1 is still open for the owner to close. #3 is closed, not merged. Dependabot opened #14 (a base image bump to a release candidate); it is open and untouched, for the owner.
+#3 is closed, not merged. #1 and #14 were closed without merging at the owner's request on 14 October (decision P3-11).
 
 **Open by design:** #15, the weak-prompt demonstration. `ci` passes, the required `evals` check fails (ungrounded quotes 334 of 334, control-triggered review rate 30 of 30, edge cases 5 of 6) and GitHub reports the merge as blocked. It is never merged.
 
@@ -270,7 +271,9 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 
 **Merged in #18:** screenshot `01`; the merge count brought up to date after #17; the two nits from the CI review of #17; decision P3-9.
 
-**This branch (`s6b-llmops-drift`):** dashboard tiles 5 (live drift by day) and 6 (requests to look at), a links header in the workbook, and `docs/llmops.md`, decision P3-10. **Next:** the owner applies the observability deployment, then H4, in which the owner takes `05`, `06` and `10`.
+**Merged in #19:** dashboard tiles 5 (live drift by day) and 6 (requests to look at), a links header in the workbook, and `docs/llmops.md`, decision P3-10.
+
+**This branch (`p3-records`):** decision P3-11 (pull requests #1 and #14 closed at the owner's request; the second denial of the observability deployment) and `next-session-prompt.md`, the brief for the next session's AI-native SDLC evidence dashboard. **Next:** the owner applies the observability deployment, then H4.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt had passed nine of its ten full runs at the end of Phase 2; with the CI gate run on #16 and the first nightly run, both PASS, it has passed eleven of its twelve.
 
@@ -300,17 +303,16 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 Done by the owner on 14 October: the `ghcr.io` package made public; the run for #16 approved (the first deploy) and the run queued by #10 rejected; the `warm` and `image_sha` routes dispatched and approved (decision P3-6); the demo token saved in the screenshot window; CodeQL default setup switched on for Python and GitHub Actions, with its first analysis passing; the alert email address confirmed with Azure's passcode, and the test alert received (decision P3-7, the S6 proof). The `id-deploy` fallback role is not needed (decision P3-2).
 
 1. **Portal screenshots** `05-foundry-deployment.png`, `06-appinsights-trace.png` and `10-dashboard.png`, which need your sign-in. They can wait for H4.
-2. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
-3. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
-4. **Judge the three actions taken after denials on 14 October**, listed under "Denied actions" below (the third is a read-only preview): say whether any counts as working round a denial.
-5. **Apply the observability deployment for tiles 5 and 6** (decision P3-10): the `az deployment group create` command for `infra/observability.bicep` in the pull request that adds the tiles. Auto mode denied it to the lead; its read-only preview touches only the workbook, the two alert rules and the action group.
-6. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
+2. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
+3. **Judge the three actions taken after denials on 14 October**, listed under "Denied actions" below (the third is a read-only preview): say whether any counts as working round a denial.
+4. **Apply the observability deployment for tiles 5 and 6** (decision P3-10): the `az deployment group create` command for `infra/observability.bicep` in the pull request that adds the tiles. Auto mode denied it to the lead; its read-only preview touches only the workbook, the two alert rules and the action group.
+5. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
 
 **Denied actions, for the record (none retried as it was; where an equivalent action followed, it is said below with the reason, for the owner to judge):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting, which the owner then switched on; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
 - the lead's dispatch of the `warm` route, denied as a production deploy. Nothing was tried in its place; the owner dispatched both routes (decisions P3-3, P3-6);
 - one `uv run poe check` piped into `tail`, denied as weakening security. The lead then ran `uv run poe check` exactly as it stands in the project's allow list. Its reason: the check is the command `CLAUDE.md` requires before any pull request, and the denial looked aimed at the pipe, not at the check;
 - one read-only `sed` and `grep` over `pyproject.toml` and two scripts, denied as a production deploy straight after the dispatch denial. The lead then read the same lines with the Read and Grep tools. Its reason: reading files in the repository changes nothing, and the denial message itself pointed to other tools for a harmless action. If the owner sees any of these as working round a denial, that judgement is the owner's.
-- the lead's `az deployment group create` for `infra/observability.bicep`, when the template held tile 5, denied as a blind apply; no second attempt was made after tile 6 was added. The lead then ran the read-only `what-if` preview, the safer method the denial message pointed to, and left the apply to the owner ("Needs owner" item 5).
+- the lead's `az deployment group create` for `infra/observability.bicep`, when the template held tile 5, denied as a blind apply. The lead then ran the read-only `what-if` preview, the safer method the denial message pointed to, and left the apply to the owner ("Needs owner" item 4). Later, with tile 6 merged and after the owner said "you do all", the lead tried it once more, and auto mode denied it again as a blind apply; it was not tried a third time (decision P3-11).
 
 ## Deviations
 
