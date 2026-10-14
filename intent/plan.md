@@ -280,7 +280,7 @@ Last updated: Wednesday 14 October 2026, about 17:15 (Phase 3, on branch `s9-rec
 
 **Merged in #21:** S9, decisions S9-1 to S9-4: the delivery evidence workbook, opening on a trust scorecard. **Merged in #22:** decision P3-12, the wording notes deferred from #19.
 
-**The owner's apply (decision S9-5):** both workbooks are live and read back equal to their files. **This branch (`s9-records`):** decision S9-5 and these records. **Next:** H4.
+**The owner's apply (decision S9-5):** both workbooks are live. The delivery evidence workbook reads back equal to its file; the operational one equals its file as merged in #21, because #22 changed tile 6's no-data message after the apply. **This branch (`s9-records`):** decision S9-5 and these records. **Next:** H4.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt had passed nine of its ten full runs at the end of Phase 2; with the CI gate run on #16 and the first nightly run, both PASS, it has passed eleven of its twelve.
 
@@ -302,7 +302,7 @@ Last updated: Wednesday 14 October 2026, about 17:15 (Phase 3, on branch `s9-rec
 
 **Not met yet:**
 - **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind the first four tiles returned that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
-- **The deployed availability alert and workbook** hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
+- **Tile 6's no-data message** from #22 is not in the deployed operational workbook; it goes live with one more apply of `infra/observability.bicep` (decision S9-5). The availability alert rule has carried the S6-8 query since the deployment at 14:41 UTC.
 - **Screenshots** `05`, `06` and `10`: see "Needs owner".
 
 **Needs owner (in this order):**
