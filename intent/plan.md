@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Wednesday 14 October 2026, about 14:42 (Phase 3, on branch `p3-records`, after #19 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
+Last updated: Wednesday 14 October 2026, about 16:00 (Phase 3, on branch `p3-wording`, after #20 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
 
 **Phase 3 so far.**
 - **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
@@ -262,6 +262,7 @@ Last updated: Wednesday 14 October 2026, about 14:42 (Phase 3, on branch `p3-rec
 | 17 | S5b and the Phase 3 records | verifier PASS at `42a9962` after four FAIL verdicts for stale text; CI review: no Important findings, its two nits fixed in the follow-up |
 | 18 | S5b follow-up: screenshot `01`, the merge count after #17, the CI review nits of #17 | verifier PASS; security review and CI review: no Important findings |
 | 19 | S6b: dashboard tiles 5 and 6, a links header, `docs/llmops.md` | verifier PASS after two FAILs; security review: two Important findings, both fixed; CI review: no Important findings. The observability deployment that makes the tiles live is the owner's |
+| 20 | P3-11: pull requests #1 and #14 closed, the deploy retry recorded, the next-session brief | CI review: no Important findings, one nit |
 
 #3 is closed, not merged. #1 and #14 were closed without merging at the owner's request on 14 October (decision P3-11).
 
@@ -273,7 +274,9 @@ Last updated: Wednesday 14 October 2026, about 14:42 (Phase 3, on branch `p3-rec
 
 **Merged in #19:** dashboard tiles 5 (live drift by day) and 6 (requests to look at), a links header in the workbook, and `docs/llmops.md`, decision P3-10.
 
-**This branch (`p3-records`):** decision P3-11 (pull requests #1 and #14 closed at the owner's request; the second denial of the observability deployment) and `next-session-prompt.md`, the brief for the next session's AI-native SDLC evidence dashboard. **Next:** the owner applies the observability deployment, then H4.
+**Merged in #20:** decision P3-11 (pull requests #1 and #14 closed at the owner's request; the second denial of the observability deployment) and `next-session-prompt.md`, the brief for the next session's AI-native SDLC evidence dashboard.
+
+**This branch (`p3-wording`):** decision P3-12, the wording notes deferred from #19: what uses a key and what does not, the CI review coverage lists, tile 6's no-data message, the tile counts and the verifier count. **Next:** the owner applies the observability deployment, then H4.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt had passed nine of its ten full runs at the end of Phase 2; with the CI gate run on #16 and the first nightly run, both PASS, it has passed eleven of its twelve.
 
@@ -294,7 +297,7 @@ Last updated: Wednesday 14 October 2026, about 14:42 (Phase 3, on branch `p3-rec
 **Confirmed on the first deploy (decision P3-2):** the `environment:demo` subject context works; `id-deploy` updates the app with its role scoped to the app only; the public `ghcr.io` image pulls with no registry entry.
 
 **Not met yet:**
-- **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind all four tiles return that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
+- **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind the first four tiles returned that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
 - **The deployed availability alert and workbook** hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
 - **Screenshots** `05`, `06` and `10`: see "Needs owner".
 
