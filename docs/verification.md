@@ -94,4 +94,4 @@ Every test named here passed in the run above, except the three start-up tests, 
 
 GitHub state (the ruleset, the `demo` reviewer, review comments, CodeQL, the waiting deploy run), Azure state (every deployed resource, the workbook as rendered, the alert email), and all live behaviour (the live URL, a real guardrail block, the page in a browser).
 
-The Phase 3 re-check saw the GitHub state it cites, the deployed app's answers and its telemetry. It still did not see the workbook as rendered in the portal, an alert email (the address awaits the owner's passcode, decision S6-7), or a real guardrail block. CodeQL default setup was switched on by the owner on 14 October (Python and GitHub Actions), and its first analysis passed.
+The Phase 3 re-check saw the GitHub state it cites, the deployed app's answers and its telemetry. It still did not see the workbook as rendered in the portal or a real guardrail block. A test alert reached the owner's email after the owner confirmed the address (decision P3-7). CodeQL default setup was switched on by the owner on 14 October (Python and GitHub Actions), and its first analysis passed.

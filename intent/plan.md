@@ -286,19 +286,17 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 
 **Not met yet:**
 - **Dashboard in the portal.** On 14 October the deployed app took 45 scored requests (the deploy's smoke test, then 30 `normal` and 12 `injection-burst` requests, all 200). Run with the read-only CLI, the queries behind all four tiles return that data: p95 latency 2.25 s against the 6 s SLO, availability 100%, cost per score about 0.0047 GBP, control-triggered review rate 11 of 45 (24.4%, inside the 25% band on a mix with a deliberate injection burst), and six eval runs, the nightly one newest. The agent has not seen the workbook rendered in the portal.
-- **The test alert has not reached email.** The address on action group `ag-answer-scorer-email` is the Azure sign-in address. It needs Azure's one-time passcode, which expires 30 minutes after the group is saved; the portal's Resend button sends a new one.
 - **The deployed availability alert and workbook** hold the text from before decision S6-8; `main.bicep` is not re-provisioned, so they change only if the owner chooses to update them.
 - **Screenshots** `05`, `06` and `10`: see "Needs owner". `01` is retaken by the lead after this branch merges, so that it shows the updated README.
 
 **Needs owner (in this order):**
 
-Done by the owner on 14 October: the `ghcr.io` package made public; the run for #16 approved (the first deploy) and the run queued by #10 rejected; the `warm` and `image_sha` routes dispatched and approved (decision P3-6); the demo token saved in the screenshot window; CodeQL default setup switched on for Python and GitHub Actions, with its first analysis passing. The `id-deploy` fallback role is not needed (decision P3-2).
+Done by the owner on 14 October: the `ghcr.io` package made public; the run for #16 approved (the first deploy) and the run queued by #10 rejected; the `warm` and `image_sha` routes dispatched and approved (decision P3-6); the demo token saved in the screenshot window; CodeQL default setup switched on for Python and GitHub Actions, with its first analysis passing; the alert email address confirmed with Azure's passcode, and the test alert received (decision P3-7, the S6 proof). The `id-deploy` fallback role is not needed (decision P3-2).
 
 1. **Portal screenshots** `05-foundry-deployment.png`, `06-appinsights-trace.png` and `10-dashboard.png`, which need your sign-in. They can wait for H4.
-2. **Alert email.** Enter Azure's passcode for the sign-in address on action group `ag-answer-scorer-email` (Resend in the portal), then say whether the lead sends one test notification.
-3. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
-4. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
-5. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
+2. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
+3. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
+4. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
 
 **Denied actions, for the record (none retried as it was; where an equivalent action followed, it is said below with the reason, for the owner to judge):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting, which the owner then switched on; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
 - the lead's dispatch of the `warm` route, denied as a production deploy. Nothing was tried in its place; the owner dispatched both routes (decisions P3-3, P3-6);

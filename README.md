@@ -96,8 +96,8 @@ An AI coding agent, Claude Code, wrote everything that came after the intent, th
 **Decisions only the owner made, or still has to make**
 
 - Made: the [intent](intent/intent.md), and the 21 design decisions C1 to C21 in [the spec](intent/spec.md), section 13. In the build session on 13 October: switching on email privacy for the account and asking for the stack to be merged (decision D19), and accepting decision S4c-8, under which the unit tests follow the registry's active prompt instead of pinning `v1` (decision S4c-14).
-- On 14 October: making the container image public; approving the first deploy (the run for #16) and rejecting an older run that would have stopped at sign-in; dispatching and approving the `warm` and `image_sha` routes (decision P3-6); and switching CodeQL default setup on.
-- Still to make: approving every later deploy; closing pull request #1; what to do with Dependabot's pull request #14; confirming the alert email address with Azure's passcode (decision S6-7); any loosening of a threshold (none has been asked for); and the final acceptance.
+- On 14 October: making the container image public; approving the first deploy (the run for #16) and rejecting an older run that would have stopped at sign-in; dispatching and approving the `warm` and `image_sha` routes (decision P3-6); switching CodeQL default setup on; and confirming the alert email address (decision P3-7).
+- Still to make: approving every later deploy; closing pull request #1; what to do with Dependabot's pull request #14; any loosening of a threshold (none has been asked for); and the final acceptance.
 
 **What no person has reviewed**
 
@@ -164,7 +164,7 @@ The first three are offline and need nothing else. A fake run says nothing about
 - **Model variance is real.** In three live smoke runs the same strong sample scored 5 twice and 3 once. The three-run rule and the spread flag exist for that reason, and they do not remove it.
 - **The platform guardrail has not been seen to block.** Our own screen caught the injection sample in live testing; the guardrail-block path is proven by unit tests only.
 - **Hooks are guardrails, not a boundary** (decision D14). The hard limits are the ruleset, the owner-only deploy approval and the scope of each identity.
-- **Live, but small.** The live figures above come from 45 scored requests on one morning, most of them from the traffic script. The four dashboard tiles return the deployed app's data when their queries are run with the read-only CLI, but the agent has not seen the workbook rendered in the portal. No alert email has been delivered: the address awaits the owner's confirmation with Azure's passcode (decision S6-7).
+- **Live, but small.** The live figures above come from 45 scored requests on one morning, most of them from the traffic script. The four dashboard tiles return the deployed app's data when their queries are run with the read-only CLI, but the agent has not seen the workbook rendered in the portal. A test alert reached the owner's email on 14 October (decision P3-7); no real alert has fired.
 - **One log exposure.** Azure identifiers, not credentials, were printed in one workflow log; they are now held as secrets (decision F-1).
 - **Scope.** English only, two generic competencies, no review queue, no real rater study and no formal compliance sign-off. See [docs/governance.md](docs/governance.md) for what production would add.
 
