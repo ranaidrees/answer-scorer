@@ -150,7 +150,8 @@ MONTHS = (
 
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_]*")
 UTC_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
-PARAMETER_REFERENCE = re.compile(r"\{\s*(?:TimeRange|selectedTab)\b", re.IGNORECASE)
+# Any {Name...} would be read by the workbook as a parameter reference, so none is let in.
+PARAMETER_REFERENCE = re.compile(r"\{\s*[A-Za-z_]\w*")
 
 
 # --- KQL literals ---------------------------------------------------------------------------
@@ -459,7 +460,8 @@ def caption(tab: str, limit: str, as_of: str) -> dict:
         f"**What this tab does not prove.** {limit} The data is synthetic: the golden set, the "
         "eval cases and the demo traffic are all made up. Reliability is not validity: a gate "
         "that gives the same result every time does not show that the scores are right. Every "
-        "review counted here was made by an AI agent, not a person. Figures are a snapshot "
+        "code, eval and label review counted here was made by an AI agent, not a person; the "
+        "deploy approvals are the owner's. Figures are a snapshot "
         f"dated {as_of} unless the tile or its heading says live.",
         tab,
         style="info",

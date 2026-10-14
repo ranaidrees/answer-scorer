@@ -50,9 +50,13 @@ STEP_RESULTS = {"success": "passed", "failure": "failed", "skipped": "skipped"}
 CO_AUTHOR = re.compile(r"co-authored-by:\s*claude", re.IGNORECASE)
 WHO_VALUES = ("agent", "owner", "rule", "shared")
 
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-TOKEN = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,})")
-URL = re.compile(r"https?://[^\s\"]+")
+EMAIL = re.compile(r"[\w.+-]+(?:@|%40)[\w-]+\.[\w.-]+", re.IGNORECASE)
+TOKEN = re.compile(r"(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|eyJ[\w-]{10,}\.[\w-]{10,})")
+AZURE_HOST = re.compile(
+    r"azurecontainerapps\.io|applicationinsights\.azure\.com|instrumentationkey|/subscriptions/",
+    re.IGNORECASE,
+)
+URL = re.compile(r"https?://[^\s\"]+", re.IGNORECASE)
 SHA40 = re.compile(r"[0-9a-f]{40}")
 
 
@@ -120,19 +124,19 @@ STAGES: tuple[dict[str, str], ...] = (
     {
         "stage": "Plan",
         "artifact": "intent/intent.md",
-        "gate": "the owner commits it (who decides: owner)",
+        "gate": "the owner wrote it and committed it first (who decides: owner)",
         "source": blob("intent/intent.md"),
     },
     {
         "stage": "Design",
         "artifact": "intent/spec.md and rubrics/*.yaml",
-        "gate": "validation session, independent rubric check and Claude review (who decides: owner, and a rule for the rubric check)",
+        "gate": "validation session under the owner's delegation, independent rubric check (D23) and the CI Claude review; the owner's final acceptance is still to come (who decides: agent and rule, under the owner's delegation)",
         "source": blob("intent/spec.md"),
     },
     {
         "stage": "Build",
         "artifact": "intent/plan.md slice sections, code and tests",
-        "gate": "plan reviewed before code, verifier PASS and ci green (who decides: agent and rule)",
+        "gate": "slice sections built as written, with no separate plan pull request (D12); verifier PASS and ci green (who decides: agent and rule)",
         "source": blob("intent/plan.md"),
     },
     {
@@ -177,15 +181,18 @@ def run_command(args: list[str], cwd: Path = ROOT) -> str:
     Standard error is captured and dropped, so an error body from GitHub never reaches
     the console; a non-zero exit raises SnapshotError naming the command only.
     """
-    completed = subprocess.run(
-        args,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError:
+        raise SnapshotError(f"{describe(args)} could not be started") from None
     if completed.returncode != 0:
         raise SnapshotError(f"{describe(args)} failed with exit code {completed.returncode}")
     return completed.stdout
@@ -296,6 +303,8 @@ def blocked_by_eval_gate(pulls: list[dict]) -> list[int]:
         if pull.get("state") != "open":
             continue
         sha = (pull.get("head") or {}).get("sha", "")
+        if not SHA40.fullmatch(sha):
+            raise SnapshotError("a pull request head is not a commit SHA; nothing written")
         checks = gh_api(f"{API}/commits/{sha}/check-runs?per_page={PER_PAGE}")
         if any(
             check.get("name") == EVALS_CHECK and check.get("conclusion") == "failure"
@@ -784,8 +793,10 @@ def check_public(text: str) -> None:
         raise SnapshotError("the snapshot would hold an email address; nothing written")
     if TOKEN.search(text):
         raise SnapshotError("the snapshot would hold a token-shaped string; nothing written")
+    if AZURE_HOST.search(text):
+        raise SnapshotError("the snapshot would hold an Azure host or identifier; nothing written")
     for url in URL.findall(text):
-        if url != REPO_URL and not url.startswith(f"{REPO_URL}/"):
+        if (url != REPO_URL and not url.startswith(f"{REPO_URL}/")) or ".." in url:
             raise SnapshotError("the snapshot would link outside this repository; nothing written")
 
 
@@ -798,6 +809,12 @@ def main(argv: list[str] | None = None) -> int:
         check_public(text)
     except SnapshotError as error:
         print(f"sdlc_snapshot: {error}", file=sys.stderr)
+        return 1
+    except (KeyError, ValueError, TypeError) as error:
+        # A reply in an unexpected shape: name the error type only, never a path or a body.
+        print(
+            f"sdlc_snapshot: unexpected data from GitHub ({type(error).__name__})", file=sys.stderr
+        )
         return 1
     path = ROOT / OUTPUT
     path.parent.mkdir(parents=True, exist_ok=True)

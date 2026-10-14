@@ -1,35 +1,35 @@
 {
-  "generated_at": "2026-10-14T14:15:18Z",
+  "generated_at": "2026-10-14T14:39:12Z",
   "repository": "ranaidrees/answer-scorer",
   "before_production": {
     "figures": [
       {
         "measure": "Tests passing",
-        "value": "1840",
+        "value": "1841",
         "detail": "unit and hook tests collected by pytest; every pull request must pass them all in ci",
         "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
       },
       {
         "measure": "ci runs passed",
-        "value": "36 of 36",
+        "value": "37 of 37",
         "detail": "completed runs of the ci workflow",
         "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
       },
       {
         "measure": "Median ci job time",
-        "value": "47 s",
-        "detail": "the ci job, median of 36 runs",
+        "value": "51 s",
+        "detail": "the ci job, median of 37 runs",
         "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
       },
       {
         "measure": "Median test step time",
-        "value": "19 s",
-        "detail": "the lint, format check and tests step, median of 36 runs",
+        "value": "20 s",
+        "detail": "the lint, format check and tests step, median of 37 runs",
         "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
       },
       {
         "measure": "Pull requests merged",
-        "value": "15",
+        "value": "16",
         "detail": "pull requests merged into main",
         "source": "https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged"
       },
@@ -244,6 +244,11 @@
         "started": "2026-10-14T13:10:40Z",
         "job_seconds": 67,
         "test_seconds": 33
+      },
+      {
+        "started": "2026-10-14T14:17:24Z",
+        "job_seconds": 67,
+        "test_seconds": 34
       }
     ],
     "gates": [
@@ -394,13 +399,13 @@
     "figures": [
       {
         "measure": "Commits with the agent's co-author line",
-        "value": "51 of 62",
+        "value": "54 of 65",
         "detail": "commits on the branches of merged pull requests, counted once each, whose message carries Co-Authored-By: Claude",
         "source": "https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged"
       },
       {
         "measure": "Decisions made by the owner",
-        "value": "21 of 175",
+        "value": "21 of 176",
         "detail": "rows of the decision record whose Who is the owner alone; 7 more name two of owner, agent and rule",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md"
       },
@@ -433,19 +438,19 @@
       {
         "stage": "Plan",
         "artifact": "intent/intent.md",
-        "gate": "the owner commits it (who decides: owner)",
+        "gate": "the owner wrote it and committed it first (who decides: owner)",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/intent.md"
       },
       {
         "stage": "Design",
         "artifact": "intent/spec.md and rubrics/*.yaml",
-        "gate": "validation session, independent rubric check and Claude review (who decides: owner, and a rule for the rubric check)",
+        "gate": "validation session under the owner's delegation, independent rubric check (D23) and the CI Claude review; the owner's final acceptance is still to come (who decides: agent and rule, under the owner's delegation)",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/spec.md"
       },
       {
         "stage": "Build",
         "artifact": "intent/plan.md slice sections, code and tests",
-        "gate": "plan reviewed before code, verifier PASS and ci green (who decides: agent and rule)",
+        "gate": "slice sections built as written, with no separate plan pull request (D12); verifier PASS and ci green (who decides: agent and rule)",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/plan.md"
       },
       {
@@ -470,7 +475,7 @@
     "decisions_by_who": [
       {
         "who": "agent",
-        "decisions": 143
+        "decisions": 144
       },
       {
         "who": "owner",

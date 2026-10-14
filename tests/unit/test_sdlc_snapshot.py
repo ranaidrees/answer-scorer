@@ -757,6 +757,26 @@ def test_the_public_check_refuses_an_email_a_token_or_a_foreign_link():
         FAKE_TOKEN,
         "https://example.com/x",
         "https://github.com/ranaidrees/other-repo",
+        "HTTPS://example.com/x",
+        f"{REPO_URL}/../../other/repo",
+        "app.example.azurecontainerapps.io",
+        "someone%40example.invalid",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0",
     ):
         with pytest.raises(snap.SnapshotError):
             snap.check_public(f'{{"detail": "{bad}"}}')
+
+
+def test_the_committed_snapshot_and_workbook_pass_the_public_check():
+    # The workbook is public in the repository; the same guard covers both committed files.
+    schema = "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+    for relative in ("dashboards/sdlc_snapshot.json", "infra/sdlc_workbook.json"):
+        path = snap.ROOT / relative
+        if not path.exists():
+            pytest.skip(f"{relative} not generated yet")
+        text = path.read_text(encoding="utf-8")
+        if relative.startswith("infra/"):
+            # The schema address and Learn links are the only other links the workbook may hold.
+            text = text.replace(schema, "")
+            text = re.sub(r"https://learn\.microsoft\.com/[^\s\")]+", "", text)
+        snap.check_public(text)
