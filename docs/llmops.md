@@ -2,7 +2,7 @@
 
 How the running scorer is watched and improved, answered as the five questions people ask about LLM operations. Each answer says what is built, where to see it, and what is not built. The data is synthetic and every output is decision support only. The figures below show that the controls behave consistently, not that the scores are right: reliability is not validity.
 
-Dashboard tiles 5 and 6 were added on 14 October. They are in `infra/workbook.json` and `dashboards/queries.kql`, and they have been in the live workbook since the owner applied the observability deployment on 14 October (decisions P3-10 and S9-5).
+Dashboard tiles 5 and 6 were added on 14 October. They are in `infra/workbook.json` and `dashboards/queries.kql`, and they have been in the live workbook since a deployment of `infra/observability.bicep` at 14:41 UTC on 14 October (decisions P3-10 and S9-5).
 
 ## 1. What plays the part of an LLM observability tool such as Langfuse?
 

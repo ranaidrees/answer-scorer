@@ -16,6 +16,7 @@ targetScope = 'resourceGroup'
 @minLength(1)
 param applicationInsightsName string
 
+@minLength(1)
 @secure()
 @description('Address that receives the alert emails. Given at deployment time and never written to a tracked file. Marked secure so that it is not kept in the deployment history.')
 param alertEmail string
