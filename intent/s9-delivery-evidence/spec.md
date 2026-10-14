@@ -26,7 +26,7 @@ Chosen: the snapshot for GitHub and repository figures, embedded as KQL `datatab
 | `infra/sdlc_dashboard.bicep` | One workbook, bound to Application Insights by name at deploy time, as `observability.bicep` does |
 | `tests/unit/test_sdlc_snapshot.py`, `tests/unit/test_sdlc_dashboard.py` | New tests (section 5) |
 
-`ci.yml` also builds the new Bicep file. Nothing under `src/`, `prompts/`, `rubrics/`, `evals/` or `config/` changes, so the eval gate has nothing to run.
+`ci.yml` also builds the new Bicep file. `README.md` gains a row for S9 in its build table, and `docs/walkthrough.md` gains the second workbook in its dashboard step (decision S9-3). Nothing under `src/`, `prompts/`, `rubrics/`, `evals/` or `config/` changes, so the eval gate has nothing to run.
 
 ## 3. Snapshot schema
 

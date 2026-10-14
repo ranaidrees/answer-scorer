@@ -433,7 +433,7 @@ def gate_rows(root: Path) -> list[dict[str, str]]:
             "source": blob(".github/dependabot.yml"),
         },
         {
-            "gate": "Signed build provenance verified before every deploy",
+            "gate": "Signed build provenance verified before every image deploy",
             "status": "yes" if verified else "no",
             "source": blob(".github/workflows/deploy.yml"),
         },

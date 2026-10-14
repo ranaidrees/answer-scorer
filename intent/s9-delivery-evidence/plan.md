@@ -14,7 +14,7 @@
 | Run the snapshot; run every new query read-only against Application Insights; `what-if` the Bicep | lead | after steps 2 and 3 |
 | Verifier, security review, pull request, checks, merge | lead | after that |
 | Apply the two deployments (spec section 6) | owner | once, after the merge: the only other owner action |
-| Read the workbook back, give the owner its portal link, update README, walkthrough and records | lead | after the apply |
+| Read the workbook back, give the owner its portal link, record the apply | lead | after the apply |
 
 ## Order
 
@@ -23,7 +23,7 @@
 3. `az deployment group what-if` on `infra/sdlc_dashboard.bicep` (read-only).
 4. Verifier against this plan; security review of the diff; pull request; `ci` and `evals` checks; squash merge.
 5. Ask the owner once to run the two commands in spec section 6.
-6. Read the workbook back (read-only), check that its items equal the file, and give the owner the portal link. Add the dashboard to README and the walkthrough in a follow-up records pull request.
+6. Read the workbook back (read-only), check that its items equal the file, and give the owner the portal link. The README row and the walkthrough step went into the S9 pull request itself (decision S9-3).
 
 ## Cut if behind
 

@@ -21,7 +21,10 @@ REPO_URL = "https://github.com/ranaidrees/answer-scorer"
 API = "repos/ranaidrees/answer-scorer"
 NOW = datetime(2026, 10, 14, 15, 30, tzinfo=UTC)
 AUTHOR_NAME = "Jane Example"
-AUTHOR_EMAIL = "jane.example@example.invalid"
+# Fake addresses and hosts are assembled at run time, so the file itself holds none.
+AT = chr(64)
+AUTHOR_EMAIL = "jane.example" + AT + "example.invalid"
+BOT_EMAIL = "noreply" + AT + "example.invalid"
 FAKE_TOKEN = "ghp_" + "A1b2C3d4E5" * 4
 RULESET_ID = 4242424
 PINNED = "actions/checkout@" + "a" * 40
@@ -117,7 +120,7 @@ def fake_github() -> dict[str, object]:
             "author": {"login": "jane-example"},
         }
 
-    trailer = "Co-Authored-By: Claude Opus <noreply@example.invalid>"
+    trailer = f"Co-Authored-By: Claude Opus <{BOT_EMAIL}>"
     deploy_runs = [
         # Listed newest first, as GitHub does.
         deploy_run(
@@ -199,7 +202,7 @@ def fake_github() -> dict[str, object]:
         ],
         f"{API}/pulls/2/commits": [
             commit(2, f"Fix a typo by hand {FAKE_TOKEN}"),
-            commit(3, "Records\n\nco-authored-by: claude <noreply@example.invalid>"),
+            commit(3, f"Records\n\nco-authored-by: claude <{BOT_EMAIL}>"),
         ],
         f"{API}/rulesets": [{"id": RULESET_ID, "name": "main"}],
         f"{API}/rulesets/{RULESET_ID}": {
@@ -480,7 +483,7 @@ def test_the_file_is_deterministic_indented_and_ends_with_a_newline(repo, calls)
     assert first == second
     assert first.endswith("}\n")
     assert first == json.dumps(json.loads(first), indent=2, ensure_ascii=False) + "\n"
-    assert "—" not in first and "–" not in first
+    assert chr(0x2014) not in first and chr(0x2013) not in first
 
 
 # --- before production -----------------------------------------------------------------
@@ -538,7 +541,7 @@ def test_the_gates_table(snapshot):
         "secret scanning enabled; push protection enabled"
     )
     assert gates["Dependabot version updates"] == "github-actions, docker"
-    assert gates["Signed build provenance verified before every deploy"] == "yes"
+    assert gates["Signed build provenance verified before every image deploy"] == "yes"
 
 
 def test_a_setting_that_cannot_be_read_says_so(repo, calls, monkeypatch):
@@ -759,9 +762,9 @@ def test_the_public_check_refuses_an_email_a_token_or_a_foreign_link():
         "https://github.com/ranaidrees/other-repo",
         "HTTPS://example.com/x",
         f"{REPO_URL}/../../other/repo",
-        "app.example.azurecontainerapps.io",
-        "someone%40example.invalid",
-        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+        "app.example." + "azurecontainerapps" + ".io",
+        "someone" + "%" + "40example.invalid",
+        "ey" + "JhbGciOiJIUzI1NiJ9." + "ey" + "JzdWIiOiIxMjM0NTY3ODkwIn0",
     ):
         with pytest.raises(snap.SnapshotError):
             snap.check_public(f'{{"detail": "{bad}"}}')

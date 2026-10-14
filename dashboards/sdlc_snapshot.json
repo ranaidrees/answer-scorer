@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14T14:41:03Z",
+  "generated_at": "2026-10-14T14:57:36Z",
   "repository": "ranaidrees/answer-scorer",
   "before_production": {
     "figures": [
@@ -283,7 +283,7 @@
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/dependabot.yml"
       },
       {
-        "gate": "Signed build provenance verified before every deploy",
+        "gate": "Signed build provenance verified before every image deploy",
         "status": "yes",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/deploy.yml"
       }
@@ -405,7 +405,7 @@
       },
       {
         "measure": "Decisions made by the owner",
-        "value": "21 of 177",
+        "value": "21 of 178",
         "detail": "rows of the decision record whose Who is the owner alone; 8 more name two of owner, agent and rule",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md"
       },
@@ -475,7 +475,7 @@
     "decisions_by_who": [
       {
         "who": "agent",
-        "decisions": 144
+        "decisions": 145
       },
       {
         "who": "owner",
