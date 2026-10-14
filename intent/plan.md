@@ -236,7 +236,7 @@ Last updated: Wednesday 14 October 2026, about 16:00 (Phase 3, on branch `p3-wor
 - **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
 - **Hooks proven live** in this fresh session (decision P3-1).
 - **Live traffic** of both profiles: 42 of 42 requests returned 200, and 9 of 9 injected answers were flagged and routed.
-- **Dashboard.** The four tile queries return the deployed app's data.
+- **Dashboard.** The queries behind the first four tiles returned the deployed app's data on 14 October; tiles 5 and 6 came later the same day (decision P3-10).
 - **Verification.** Every pending-live item was re-checked (`docs/verification.md`).
 - **Both manual deploy routes proven** (decision P3-6). Auto mode denied the lead's dispatch as a production deploy (decision P3-3), so the owner dispatched `warm=true` and then `image_sha` with the commit of #16, and approved each. The `image_sha` run verified provenance and passed smoke 6 of 6. The app now keeps one warm replica.
 - **Screenshots.** Eight taken: the three live app result cards after the owner saved the demo token in the window, and five GitHub pages. The three portal ones need the owner's sign-in.
