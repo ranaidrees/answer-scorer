@@ -15,7 +15,7 @@ The demo runs on synthetic data and is not for use in real hiring decisions. Its
 
 ## 2. Provider requirements: Articles 9 to 15
 
-Articles 9 to 15 are requirements on the system that the **provider** must meet (Article 16). The table gives the demo control for each and where to see it. "Tile" means a tile of the dashboard workbook, whose queries are in [dashboards/queries.kql](../dashboards/queries.kql) and whose layout is in [infra/workbook.json](../infra/workbook.json); the queries behind the first four tiles returned data when run with the read-only CLI against telemetry from the deployed application on 14 October, and tiles 5 and 6, added the same day (decision P3-10), are live in the portal only after the owner applies the observability deployment, but the agent has not seen the workbook rendered in the portal.
+Articles 9 to 15 are requirements on the system that the **provider** must meet (Article 16). The table gives the demo control for each and where to see it. "Tile" means a tile of the dashboard workbook, whose queries are in [dashboards/queries.kql](../dashboards/queries.kql) and whose layout is in [infra/workbook.json](../infra/workbook.json); the queries behind the first four tiles returned data when run with the read-only CLI against telemetry from the deployed application on 14 October, and tiles 5 and 6, added the same day (decision P3-10), have been in the live workbook since a deployment of `infra/observability.bicep` at 14:41 UTC on 14 October (decision S9-5); the deployed workbook was read back and equals the file as merged in #21 (tile 6's no-data message from #22 is not live yet), but the agent has not seen it rendered in the portal.
 
 | Requirement area | Demo control | Where to see it |
 |---|---|---|

@@ -698,3 +698,16 @@ def test_the_no_pair_text_follows_the_gate_verdict_not_the_missing_value():
         'iff(tolower(tostring(ev["injection_mean_diff_passed"])) == "true", '
         '"no pair to compare (the gate passes it)", "no pair to compare (the gate fails it)")'
     ) in query
+
+
+def test_both_bicep_files_refuse_an_empty_application_insights_name():
+    # An empty name bound the workbook to no resource on 14 October (decision S9-5).
+    for path in (BICEP_FILE, REPO_ROOT / "infra" / "observability.bicep"):
+        assert "@minLength(1)\nparam applicationInsightsName string\n" in read(path), path.name
+
+
+def test_the_alert_address_must_not_be_empty_either():
+    # An empty address made the 16:06 UTC run a partial apply (decision S9-5).
+    assert "@minLength(1)\n@secure()\n@description(" in read(
+        REPO_ROOT / "infra" / "observability.bicep"
+    )

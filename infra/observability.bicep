@@ -13,8 +13,10 @@
 targetScope = 'resourceGroup'
 
 @description('Name of the existing Application Insights resource in this resource group. The workbook and both alert rules are bound to it here, so no resource ID is written in any file.')
+@minLength(1)
 param applicationInsightsName string
 
+@minLength(1)
 @secure()
 @description('Address that receives the alert emails. Given at deployment time and never written to a tracked file. Marked secure so that it is not kept in the deployment history.')
 param alertEmail string

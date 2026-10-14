@@ -2,7 +2,7 @@
 
 How the running scorer is watched and improved, answered as the five questions people ask about LLM operations. Each answer says what is built, where to see it, and what is not built. The data is synthetic and every output is decision support only. The figures below show that the controls behave consistently, not that the scores are right: reliability is not validity.
 
-Dashboard tiles 5 and 6 were added on 14 October. They are in `infra/workbook.json` and `dashboards/queries.kql`, and they appear in the live workbook once the owner applies the observability deployment (decision P3-10).
+Dashboard tiles 5 and 6 were added on 14 October. They are in `infra/workbook.json` and `dashboards/queries.kql`, and they have been in the live workbook since a deployment of `infra/observability.bicep` at 14:41 UTC on 14 October (decisions P3-10 and S9-5).
 
 ## 1. What plays the part of an LLM observability tool such as Langfuse?
 
@@ -40,7 +40,7 @@ Any of these sends the answer to a person, and the reasons are counted on **dash
 
 **Watched:** dashboard tile 1 shows p50 and p95 latency against the 6 s SLO (2.25 s at p95 on 14 October); tile 3 shows tokens and estimated cost per score (about 0.0047 GBP); tile 6 shows both per request.
 
-**Alerted:** p95 over 6 s for 15 minutes and availability under 99% in an hour, by email (a test alert was received, decision P3-7); a budget on the resource group with emails at 50%, 80% and 100% of 10 GBP. The availability alert rule running in Azure takes the query text corrected in decision S6-8 (an exact comparison at 99%, where the old text rounded first) only once the owner applies the observability deployment.
+**Alerted:** p95 over 6 s for 15 minutes and availability under 99% in an hour, by email (a test alert was received, decision P3-7); a budget on the resource group with emails at 50%, 80% and 100% of 10 GBP. The availability alert rule running in Azure has taken the query text corrected in decision S6-8 (an exact comparison at 99%, where the old text rounded first) since an observability deployment at 14:41 UTC on 14 October (decision S9-5).
 
 **Not built:** an alert on cost per score. The budget alert relies on Azure's cost data, which can lag by a day.
 
