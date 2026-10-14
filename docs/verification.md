@@ -8,7 +8,7 @@ Verdicts: **MET** (evidence in the repository, or seen live where the row says s
 
 ## Result
 
-The verifier returned **FAIL** with one criterion not met: FR-2, "validates schema at startup and fails fast". Rubrics were validated on `/readyz` and on each request, but nothing stopped the server from starting over a broken rubric. That is fixed in the same pull request as this page: the server now loads every rubric and the active prompt at start-up and refuses to start if either fails, with tests in `tests/unit/test_fr2_startup.py`. The row below shows the fixed state. The verifier has not been run again after the fix; `uv run poe check` has.
+The verifier returned **FAIL** with one criterion not met: FR-2, "validates schema at startup and fails fast". Rubrics were validated on `/readyz` and on each request, but nothing stopped the server from starting over a broken rubric. That is fixed in the same pull request as this page: the server now loads every rubric and the active prompt at start-up and refuses to start if either fails, with tests in `tests/unit/test_fr2_startup.py`. The row below shows the fixed state. The full criteria check was not run again after the fix. The verifier on that branch confirmed the fix sound and returned PASS at the final commit of #16 (decision P3-8), and `uv run poe check` passed.
 
 | | MET | PENDING LIVE | Not checkable from the repository |
 |---|---|---|---|
