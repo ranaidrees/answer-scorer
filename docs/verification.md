@@ -2,15 +2,18 @@
 
 Run on 13 October 2026 by an independent, read-only verifier subagent of the build session, against `main` after pull request #13 was merged. **No person ran or reviewed this check.** Every item under "How we will know it worked" in [the intent](../intent/intent.md) and every acceptance criterion of FR-1 to FR-10 in [the spec](../intent/spec.md) was checked against code, tests, datasets, workflows and committed reports, not against what a document claims.
 
-Verdicts: **MET** (evidence in the repository), **PENDING LIVE** (needs the deployed application, the portal, a screenshot or an owner action), **Not checkable from the repository** (the evidence is a GitHub or Azure state).
+**Phase 3 re-check, 14 October 2026.** After the first deploy, the build's lead session re-checked every item that was PENDING LIVE or not checkable from the repository, against the deployed application, GitHub and Azure. It read state only, apart from the live traffic the plan asks for (45 scored requests: the deploy's smoke test, then the `normal` and `injection-burst` profiles of `scripts/traffic.py`). No person ran or reviewed this re-check either. The rows below show the result; where a verdict changed, the evidence says what was seen live.
+
+Verdicts: **MET** (evidence in the repository, or seen live where the row says so), **PENDING LIVE** (needs the portal, a screenshot or an owner action), **Not checkable from the repository** (the evidence is a GitHub or Azure state).
 
 ## Result
 
-The verifier returned **FAIL** with one criterion not met: FR-2, "validates schema at startup and fails fast". Rubrics were validated on `/readyz` and on each request, but nothing stopped the server from starting over a broken rubric. That is fixed in the same pull request as this page: the server now loads every rubric and the active prompt at start-up and refuses to start if either fails, with tests in `tests/unit/test_fr2_startup.py`. The row below shows the fixed state. The verifier has not been run again after the fix; `uv run poe check` has.
+The verifier returned **FAIL** with one criterion not met: FR-2, "validates schema at startup and fails fast". Rubrics were validated on `/readyz` and on each request, but nothing stopped the server from starting over a broken rubric. That is fixed in the same pull request as this page: the server now loads every rubric and the active prompt at start-up and refuses to start if either fails, with tests in `tests/unit/test_fr2_startup.py`. The row below shows the fixed state. The full criteria check was not run again after the fix. The verifier on that branch confirmed the fix sound and returned PASS at the final commit of #16 (decision P3-8), and `uv run poe check` passed.
 
 | | MET | PENDING LIVE | Not checkable from the repository |
 |---|---|---|---|
-| "How we will know it worked" (11 rows) | 4 | 5 | 2 |
+| "How we will know it worked" (11 rows), 13 October | 4 | 5 | 2 |
+| The same 11 rows after the Phase 3 re-check, 14 October | 10 | 1 | 0 |
 | Functional requirements (42 rows) | 42, one of them after the fix above | 0 | 0 |
 
 Commands the verifier ran: `uv run poe check` ("All checks passed!", "90 files already formatted", "1664 passed" on `main`; this branch, with the demo pack tests and the fix, gives 97 files and 1760 passed) and the offline dry run of the eval suite ("GATE: PASS (dry run with the fake model; says nothing about the scorer's quality)").
@@ -19,17 +22,17 @@ Commands the verifier ran: `uv run poe check` ("All checks passed!", "90 files a
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| The live URL scores an answer with p95 latency within the SLO | PENDING LIVE | Needs the deployed app. In the repository: the 6 s target in `docs/slo.md` and the latency queries in `dashboards/queries.kql`. Local traffic gave a p95 of 3.3 s on 41 requests, which is not the live URL |
+| The live URL scores an answer with p95 latency within the SLO | MET (live, 14 October) | Tile 1 query over the deployed app's telemetry: 46 requests, 45 completed with a score, 0 failures, p50 1.78 s and p95 2.25 s against the 6 s SLO (request duration in the app). The traffic script measured p95 5.1 s from this machine on the `normal` profile, whose first request waited 20.7 s for a replica to start from zero, and 2.3 s on the burst. The SLO is set for a warm replica (spec section 5) |
 | The weakened prompt fails the eval gate with a clear reason, three times in a row | MET | Three full-run reports on the `demo/weak-prompt` branch only, one commit, prompt `v0-weak`, each "Eval gate: FAIL", each naming the ungrounded quote rate and the control-triggered review rate |
 | The main prompt passes three times in a row | MET | `evals/reports/20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`: full runs, one commit, prompt `v1`, each "Eval gate: PASS". The scorer code on `main` differs from that commit by a comment only. It took three attempts (decisions S4c-2, S4c-5, S4c-7); the earlier reports, one of them a FAIL, are committed |
-| A pull request with the weakened prompt fails the gate and cannot merge | Not checkable from the repository | Pull request #15: `ci` passed, the required `evals` check failed and GitHub reported the merge as blocked (read by the build lead with the GitHub CLI) |
-| A live injection attempt is flagged, treated as data and routed to a person | PENDING LIVE | Needs the live URL. Short of that: the smoke script asserts flag, routing and a score that did not rise; all 18 injected rows are flagged and routed in every committed live report |
-| The dashboard shows real data from test traffic and eval runs | PENDING LIVE | Needs the portal. The queries behind all four tiles returned data through the read-only CLI after local traffic; nobody has looked at the workbook |
-| Git history shows intent, spec and plan | MET | The first commits add the three files, followed by eleven squash merges |
-| Pull requests with AI review findings and verifier verdicts | Not checkable from the repository | They are comments on the pull requests. Decisions D13, D17, D18 and D25 corroborate |
+| A pull request with the weakened prompt fails the gate and cannot merge | MET (live, 14 October) | Pull request #15, read again with the GitHub CLI: open, `ci` passed, the required `evals` check failed, and GitHub reports the merge state as `BLOCKED` |
+| A live injection attempt is flagged, treated as data and routed to a person | MET (live, 14 October) | On the deployed app: the deploy's smoke test sent the injection sample (score 2, runs 2, 2, 2, `injection_detected`, routed), and the `injection-burst` profile sent 9 injected answers and 3 clean twins. All 9 injected answers were flagged and routed, and none of the 3 clean ones was flagged. In the three groups whose clean answer was sent too, every injected answer scored the same as its clean twin. Azure's guardrail blocked none of them, as in decision S3-12 |
+| The dashboard shows real data from test traffic and eval runs | MET (live, 14 October), portal view pending | The queries behind all four tiles, which the workbook holds word for word (decision S6-2), return the deployed app's data through the read-only CLI: tile 1 as in the first row; tile 2, control-triggered review rate 11 of 45 (24.4%), inside the 25% band on a mix with a deliberate injection burst; tile 3, about 0.0047 GBP a score; tile 4, six eval runs, the newest the nightly run of 14 October (PASS). Neither alert query returns a breach. The agent has not seen the workbook rendered in the portal; that is the owner's screenshot `10-dashboard.png` |
+| Git history shows intent, spec and plan | MET | The first commits add the three files, followed by eleven squash merges on 13 October and a twelfth, #16, late that evening |
+| Pull requests with AI review findings and verifier verdicts | MET (live, 14 October) | They are comments on the pull requests. For example, `claude[bot]` posted "Review against REVIEW.md" on #4 (decision P3-4), and its review on #15 rates two findings Important. Decisions D13, D17, D18 and D25 corroborate |
 | A decisions log that says who or what made each decision | MET | `intent/decisions.md`: every row has a Who value |
-| The owner's approval before each deploy | PENDING LIVE | No deploy has run. The deploy job sits in the `demo` environment in `.github/workflows/deploy.yml`; the required reviewer is a GitHub setting |
-| The walkthrough in eight minutes, with a five-minute cut and screenshots as a fallback | PENDING LIVE | `docs/walkthrough.md` has the script, the cut and a fallback per step. No screenshot has been taken and the owner has not rehearsed it |
+| The owner's approval before each deploy | MET (live, 14 October) | The first deploy, the `deploy` run for #16, waited on the `demo` environment and was approved by the owner; GitHub's approvals record for the run names the owner. Its provenance check ran before any change (decision P3-2). Of the older runs, the owner rejected the one queued by #10. The ones queued by #11 and #13 were cancelled by GitHub while they waited: the workflow's `deploy` concurrency group keeps one waiting run, and each ended within two seconds of the next merge queuing a newer one. None of them deployed |
+| The walkthrough in eight minutes, with a five-minute cut and screenshots as a fallback | PENDING LIVE | `docs/walkthrough.md` has the script, the cut and a fallback per step. Seven screenshots are committed: four of GitHub pages and three of the live app's result cards. The three portal ones need the owner's sign-in, `01` is retaken once the updated README is on `main`, and the rehearsal is the owner's (plan H4). See `docs/screenshots/README.md` |
 
 ## Functional requirements
 
@@ -90,3 +93,5 @@ Every test named here passed in the run above, except the three start-up tests, 
 ## What this check could not see
 
 GitHub state (the ruleset, the `demo` reviewer, review comments, CodeQL, the waiting deploy run), Azure state (every deployed resource, the workbook as rendered, the alert email), and all live behaviour (the live URL, a real guardrail block, the page in a browser).
+
+The Phase 3 re-check saw the GitHub state it cites, the deployed app's answers and its telemetry. It still did not see the workbook as rendered in the portal or a real guardrail block. A test alert reached the owner's email after the owner confirmed the address (decision P3-7). CodeQL default setup was switched on by the owner on 14 October (Python and GitHub Actions), and its first analysis passed.
