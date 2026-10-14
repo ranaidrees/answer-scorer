@@ -285,7 +285,7 @@ Last updated: Wednesday 14 October 2026, about 14:42 (Phase 3, on branch `p3-rec
 - GitHub: the identifiers the workflows sign in with are repository secrets (they were repository variables until the S5a review found that variables are printed in logs; the variables are deleted); the Application Insights connection string secret; the `DEMO_TOKEN` secret on `demo`.
 - Local, git-ignored: the azd environment and `.env.local` (demo token and hash salt) in the main checkout.
 
-**CI Claude review:** live since #12 merged. It has reviewed #4 to #11 except #7, #13 twice, #15 and #16. One of its findings is not accepted: it called the workflow-level `cache-mode` key invalid, but the key exists (decision D5).
+**CI Claude review:** live since #12 merged. It has reviewed #4 to #11 except #7, #13 twice, and #15 to #20, with no Important findings on #17 to #20 (decision P3-12). One of its findings is not accepted: it called the workflow-level `cache-mode` key invalid, but the key exists (decision D5).
 
 **Hooks:** proven by unit tests (decision D11). They also loaded in the build sessions, and the cloud gate has denied real commands there with a reason (false positives on quoted text, decision D14). The verifier returned FAIL on S0 three times for fail-open shapes in the gate; each was fixed with tests (decisions D13, D17, D18). **Proven live on 14 October in a fresh session (decision P3-1):** `azd up --help` denied by the gate in Bash and `az group delete --help` in PowerShell, each with its reason; `uv run poe check` green with 1760 tests; both MCP servers answering; the format hook firing on a written file.
 
