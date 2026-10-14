@@ -780,7 +780,128 @@ def build_snapshot(root: Path, now: datetime | None = None) -> dict:
             "stages": [dict(stage) for stage in STAGES],
             "decisions_by_who": [{"who": who, "decisions": decisions[who]} for who in WHO_VALUES],
         },
+        "trust_scorecard": {"checks": scorecard_rows(root)},
     }
+
+
+# --- Trust scorecard rows (decision S9-4) ---------------------------------------------------
+
+# Dataset sizes from spec section 7: golden answers, fairness pairs, injection answers
+# (6 clean and 18 injected) and edge cases.
+SPEC_SIZES = {
+    "golden.jsonl": 30,
+    "fairness_pairs.jsonl": 16,
+    "injection.jsonl": 24,
+    "edge_cases.jsonl": 6,
+}
+
+
+def dataset_rows(root: Path, name: str) -> list[dict]:
+    text = read_text(root / "evals" / "datasets" / name)
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def scorecard_row(
+    aorder: int,
+    aspect: str,
+    corder: int,
+    check: str,
+    target: str,
+    actual: str,
+    state: str,
+    basis: str,
+) -> dict:
+    return {
+        "aorder": aorder,
+        "aspect": aspect,
+        "corder": corder,
+        "check": check,
+        "target": target,
+        "critical": False,
+        "basis": basis,
+        "actual": actual,
+        "state": state,
+    }
+
+
+def scorecard_rows(root: Path) -> list[dict]:
+    """The scorecard's checks that no table in Application Insights holds: the stability
+    proof, and the quality of the golden dataset, read from the dataset files."""
+    data = {name: dataset_rows(root, name) for name in SPEC_SIZES}
+    sizes = [len(data[name]) for name in SPEC_SIZES]
+    golden = data["golden.jsonl"]
+    cells: dict[tuple, list[str]] = {}
+    for row in golden:
+        cells.setdefault((row.get("competency_id"), row.get("label")), []).append(row.get("split"))
+    good_cells = sum(1 for splits in cells.values() if sorted(splits) == ["dev", "dev", "holdout"])
+    all_rows = [row for rows in data.values() for row in rows]
+    provenance = sum(1 for row in all_rows if row.get("label_source") and row.get("reason"))
+    dev = sum(1 for row in golden if row.get("split") == "dev")
+    holdout = sum(1 for row in golden if row.get("split") == "holdout")
+    target_sizes = ", ".join(str(value) for value in SPEC_SIZES.values())
+    golden_aspect = "Golden dataset quality"
+    return [
+        scorecard_row(
+            3,
+            "Offline evaluation",
+            7,
+            "Stability proof: accepted prompt three PASS in a row, weakened prompt three FAIL",
+            "3 and 3",
+            "3 PASS and 3 FAIL",
+            "met",
+            "decision S4c-11",
+        ),
+        scorecard_row(
+            5,
+            golden_aspect,
+            1,
+            "Sizes as specified: golden, fairness pairs, injection, edge cases",
+            target_sizes,
+            ", ".join(str(size) for size in sizes),
+            "met" if sizes == list(SPEC_SIZES.values()) else "missed",
+            "evals/datasets",
+        ),
+        scorecard_row(
+            5,
+            golden_aspect,
+            2,
+            "Coverage: every competency and level has 2 dev and 1 holdout answer",
+            "10 of 10 cells",
+            f"{good_cells} of {len(cells)} cells ({dev} dev, {holdout} holdout)",
+            "met" if len(cells) == 10 and good_cells == 10 else "missed",
+            "evals/datasets/golden.jsonl",
+        ),
+        scorecard_row(
+            5,
+            golden_aspect,
+            3,
+            "Every row carries its label source and a reason",
+            "100%",
+            f"{provenance} of {len(all_rows)}",
+            "met" if all_rows and provenance == len(all_rows) else "missed",
+            "evals/datasets",
+        ),
+        scorecard_row(
+            5,
+            golden_aspect,
+            4,
+            "Blind label audit by a second Claude agent: none off by 2 or more",
+            "none off by 2",
+            "30 of 30 exact, none off by 1 or 2",
+            "met",
+            "evals/label_audit.md",
+        ),
+        scorecard_row(
+            5,
+            golden_aspect,
+            5,
+            "Labels from trained human raters",
+            "not set",
+            f"0 of {len(golden)}",
+            "not measured",
+            "not done: synthetic data, labels by AI agents",
+        ),
+    ]
 
 
 def render(snapshot: dict) -> str:

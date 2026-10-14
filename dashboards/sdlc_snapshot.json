@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-10-14T14:57:36Z",
+  "generated_at": "2026-10-14T15:26:05Z",
   "repository": "ranaidrees/answer-scorer",
   "before_production": {
     "figures": [
       {
         "measure": "Tests passing",
-        "value": "1841",
+        "value": "1846",
         "detail": "unit and hook tests collected by pytest; every pull request must pass them all in ci",
         "source": "https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml"
       },
@@ -405,8 +405,8 @@
       },
       {
         "measure": "Decisions made by the owner",
-        "value": "21 of 178",
-        "detail": "rows of the decision record whose Who is the owner alone; 8 more name two of owner, agent and rule",
+        "value": "21 of 179",
+        "detail": "rows of the decision record whose Who is the owner alone; 9 more name two of owner, agent and rule",
         "source": "https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md"
       },
       {
@@ -487,7 +487,77 @@
       },
       {
         "who": "shared",
-        "decisions": 8
+        "decisions": 9
+      }
+    ]
+  },
+  "trust_scorecard": {
+    "checks": [
+      {
+        "aorder": 3,
+        "aspect": "Offline evaluation",
+        "corder": 7,
+        "check": "Stability proof: accepted prompt three PASS in a row, weakened prompt three FAIL",
+        "target": "3 and 3",
+        "critical": false,
+        "basis": "decision S4c-11",
+        "actual": "3 PASS and 3 FAIL",
+        "state": "met"
+      },
+      {
+        "aorder": 5,
+        "aspect": "Golden dataset quality",
+        "corder": 1,
+        "check": "Sizes as specified: golden, fairness pairs, injection, edge cases",
+        "target": "30, 16, 24, 6",
+        "critical": false,
+        "basis": "evals/datasets",
+        "actual": "30, 16, 24, 6",
+        "state": "met"
+      },
+      {
+        "aorder": 5,
+        "aspect": "Golden dataset quality",
+        "corder": 2,
+        "check": "Coverage: every competency and level has 2 dev and 1 holdout answer",
+        "target": "10 of 10 cells",
+        "critical": false,
+        "basis": "evals/datasets/golden.jsonl",
+        "actual": "10 of 10 cells (20 dev, 10 holdout)",
+        "state": "met"
+      },
+      {
+        "aorder": 5,
+        "aspect": "Golden dataset quality",
+        "corder": 3,
+        "check": "Every row carries its label source and a reason",
+        "target": "100%",
+        "critical": false,
+        "basis": "evals/datasets",
+        "actual": "76 of 76",
+        "state": "met"
+      },
+      {
+        "aorder": 5,
+        "aspect": "Golden dataset quality",
+        "corder": 4,
+        "check": "Blind label audit by a second Claude agent: none off by 2 or more",
+        "target": "none off by 2",
+        "critical": false,
+        "basis": "evals/label_audit.md",
+        "actual": "30 of 30 exact, none off by 1 or 2",
+        "state": "met"
+      },
+      {
+        "aorder": 5,
+        "aspect": "Golden dataset quality",
+        "corder": 5,
+        "check": "Labels from trained human raters",
+        "target": "not set",
+        "critical": false,
+        "basis": "not done: synthetic data, labels by AI agents",
+        "actual": "0 of 30",
+        "state": "not measured"
       }
     ]
   }

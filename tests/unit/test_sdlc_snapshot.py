@@ -417,7 +417,9 @@ def test_the_snapshot_has_the_schema_of_spec_section_3(snapshot):
         "before_production",
         "in_production",
         "ai_native_sdlc",
+        "trust_scorecard",
     ]
+    assert list(snapshot["trust_scorecard"]) == ["checks"]
     assert snapshot["generated_at"] == "2026-10-14T15:30:00Z"
     assert snapshot["repository"] == "ranaidrees/answer-scorer"
     assert list(snapshot["before_production"]) == ["figures", "ci_runs", "gates"]
@@ -783,3 +785,25 @@ def test_the_committed_snapshot_and_workbook_pass_the_public_check():
             text = text.replace(schema, "")
             text = re.sub(r"https://learn\.microsoft\.com/[^\s\")]+", "", text)
         snap.check_public(text)
+
+
+def test_the_scorecard_rows_read_the_real_datasets_and_count_human_labels_as_not_measured():
+    rows = snap.scorecard_rows(snap.ROOT)
+    states = {(row["aspect"], row["corder"]): row["state"] for row in rows}
+    assert states[("Golden dataset quality", 1)] == "met"
+    assert states[("Golden dataset quality", 2)] == "met"
+    assert states[("Golden dataset quality", 3)] == "met"
+    assert states[("Golden dataset quality", 5)] == "not measured"
+    for row in rows:
+        assert set(row) == {
+            "aorder",
+            "aspect",
+            "corder",
+            "check",
+            "target",
+            "critical",
+            "basis",
+            "actual",
+            "state",
+        }
+        assert row["critical"] is False and isinstance(row["aorder"], int)

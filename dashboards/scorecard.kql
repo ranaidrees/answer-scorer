@@ -1,0 +1,190 @@
+// Trust scorecard for the answer scorer (S9, decision S9-4).
+//
+// One row per gated check: its aspect, target, actual value and state. The `checks` part
+// is written once; the workbook adds one of the other parts after it (the overall score,
+// the score per aspect, the list of checks). `confidence` stands alone.
+//
+// scripts/build_sdlc_workbook.py fills three kinds of token before the text reaches the
+// workbook, and a test fails if any token is left:
+//   - __T_<metric>__ and __P_<metric>__: the gate value of that metric from
+//     evals/thresholds.yaml, as a number and as a percentage, so the scorecard and the eval
+//     gate can never disagree;
+//   - __STATIC_ROWS__: rows from dashboards/sdlc_snapshot.json for the checks that no
+//     table in Application Insights holds (the stability proof and the golden dataset).
+//
+// Sources: requests and `score` spans over the workbook's time range, and the newest
+// nightly `eval_run` event in that range (trigger "schedule": it runs on main against the
+// pinned deployment). State is "met", "missed", "no data" (nothing to measure in the
+// range) or "not measured" (shown, never counted). A check is critical when a miss means
+// a person may not see an answer they should; a critical miss turns the status red.
+// The text holds no curly brackets, which a workbook would read as a parameter.
+
+// part: checks
+let live = dependencies
+    | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+    | extend
+        reasons = tostring(customDimensions["scorer.review_reasons"]),
+        routed = tolower(tostring(customDimensions["scorer.needs_human_review"])) == "true",
+        injected = tolower(tostring(customDimensions["scorer.injection_detected"])) == "true",
+        ungrounded = toint(customDimensions["scorer.ungrounded_quotes"]) > 0,
+        spread = toint(customDimensions["scorer.spread"]),
+        score = toint(customDimensions["scorer.score"]),
+        protected = tolower(tostring(customDimensions["scorer.rationale_protected_term"])) == "true",
+        traceable = isnotempty(operation_Id)
+            and isnotempty(tostring(customDimensions["scorer.prompt_version"]))
+            and isnotempty(tostring(customDimensions["scorer.prompt_sha"]))
+            and isnotempty(tostring(customDimensions["scorer.model_version"]))
+            and isnotempty(tostring(customDimensions["scorer.runs"]))
+    | extend
+        tripped_output = ungrounded or spread >= 2 or protected,
+        adverse = score >= 1 and score <= 2,
+        control = array_length(set_difference(iff(isempty(reasons), dynamic([]), split(reasons, ",")), dynamic(["adverse_score"]))) > 0;
+let L = toscalar(live
+    | summarize n = count(), inj = countif(injected), inj_routed = countif(injected and routed),
+        out = countif(tripped_output), out_routed = countif(tripped_output and routed),
+        adv = countif(adverse), adv_routed = countif(adverse and routed),
+        ctl = countif(control), trace = countif(traceable)
+    | project pack("n", n, "inj", inj, "inj_routed", inj_routed, "out", out, "out_routed", out_routed,
+        "adv", adv, "adv_routed", adv_routed, "ctl", ctl, "trace", trace));
+let R = toscalar(requests
+    | where name == "POST /api/score"
+    | extend status = toint(resultCode)
+    | summarize counted = countif(status < 400 or status >= 500), failed = countif(status >= 500),
+        completed = countif(status == 200), p95 = percentile(iff(status == 200, duration, real(null)), 95)
+    | project pack("counted", counted, "failed", failed, "completed", completed, "p95", p95));
+let E = toscalar(customEvents
+    | where name == "eval_run" and tostring(customDimensions["trigger"]) == "schedule"
+    | top 1 by timestamp
+    | project pack("d", customDimensions, "t", timestamp));
+let ev = E["d"];
+let ran = isnotnull(E);
+let run_time = format_datetime(todatetime(E["t"]), "yyyy-MM-dd HH:mm");
+let n = tolong(L["n"]);
+let counted = tolong(R["counted"]);
+let availability = iff(counted > 0, 100.0 * (counted - tolong(R["failed"])) / counted, real(null));
+let p95_s = todouble(R["p95"]) / 1000.0;
+let checks = union
+    (print aorder = 1, aspect = "Input guards", corder = 1, check = "Injection cases flagged and routed (nightly eval)",
+        target = "at least __P_injection_flagged_and_routed__", critical = true, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["injection_flagged_and_routed"]) >= __T_injection_flagged_and_routed__,
+        actual = strcat(tostring(tolong(round(todouble(ev["injection_flagged_and_routed"]) * tolong(ev["injection_flagged_and_routed_n"])))), " of ", tostring(ev["injection_flagged_and_routed_n"]))),
+    (print aorder = 1, aspect = "Input guards", corder = 2, check = "Injection does not raise the score (nightly eval)",
+        target = "mean at most __T_injection_mean_diff__, no pair over __T_injection_max_pair_diff__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["injection_mean_diff"]) <= __T_injection_mean_diff__ and todouble(ev["injection_max_pair_diff"]) <= __T_injection_max_pair_diff__,
+        actual = strcat("mean ", tostring(round(todouble(ev["injection_mean_diff"]), 3)), ", largest pair ", tostring(ev["injection_max_pair_diff"]))),
+    (print aorder = 1, aspect = "Input guards", corder = 3, check = "Live injected answers sent to a person",
+        target = "100%", critical = true, basis = "live score spans",
+        measured = tolong(L["inj"]) > 0, ok = tolong(L["inj_routed"]) == tolong(L["inj"]),
+        actual = strcat(tostring(L["inj_routed"]), " of ", tostring(L["inj"]))),
+    (print aorder = 1, aspect = "Input guards", corder = 4, check = "Edge-case inputs handled as expected (nightly eval)",
+        target = "at least __P_edge_expected_behaviour__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["edge_expected_behaviour"]) >= __T_edge_expected_behaviour__,
+        actual = strcat(tostring(tolong(round(todouble(ev["edge_expected_behaviour"]) * tolong(ev["edge_expected_behaviour_n"])))), " of ", tostring(ev["edge_expected_behaviour_n"]))),
+    (print aorder = 2, aspect = "Output guards", corder = 1, check = "Ungrounded evidence quotes (nightly eval)",
+        target = "at most __P_ungrounded_quote_rate__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["ungrounded_quote_rate"]) <= __T_ungrounded_quote_rate__,
+        actual = strcat(tostring(tolong(round(todouble(ev["ungrounded_quote_rate"]) * tolong(ev["ungrounded_quote_rate_n"])))), " of ", tostring(ev["ungrounded_quote_rate_n"]), " quotes")),
+    (print aorder = 2, aspect = "Output guards", corder = 2, check = "Live tripped controls sent to a person (ungrounded, inconsistent, protected term)",
+        target = "100%", critical = true, basis = "live score spans",
+        measured = tolong(L["out"]) > 0, ok = tolong(L["out_routed"]) == tolong(L["out"]),
+        actual = strcat(tostring(L["out_routed"]), " of ", tostring(L["out"]))),
+    (print aorder = 2, aspect = "Output guards", corder = 3, check = "Live scores of 1 or 2 sent to a person",
+        target = "100%", critical = true, basis = "live score spans",
+        measured = tolong(L["adv"]) > 0, ok = tolong(L["adv_routed"]) == tolong(L["adv"]),
+        actual = strcat(tostring(L["adv_routed"]), " of ", tostring(L["adv"]))),
+    (print aorder = 3, aspect = "Offline evaluation", corder = 1, check = "Eval gate (nightly eval)",
+        target = "PASS", critical = true, basis = "nightly eval_run event",
+        measured = ran, ok = tolower(tostring(ev["passed"])) == "true",
+        actual = strcat(iff(tolower(tostring(ev["passed"])) == "true", "PASS", "FAIL"), ", ", run_time, " UTC, prompt ", tostring(ev["prompt_version"]))),
+    (print aorder = 3, aspect = "Offline evaluation", corder = 2, check = "Agreement with labels, quadratic weighted kappa",
+        target = "at least __T_golden_qwk__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["golden_qwk"]) >= __T_golden_qwk__,
+        actual = strcat(tostring(round(todouble(ev["golden_qwk"]), 3)), " (n=", tostring(ev["golden_qwk_n"]), ")")),
+    (print aorder = 3, aspect = "Offline evaluation", corder = 3, check = "Within one level of the label",
+        target = "at least __P_golden_within_1__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["golden_within_1"]) >= __T_golden_within_1__,
+        actual = strcat(tostring(tolong(round(todouble(ev["golden_within_1"]) * tolong(ev["golden_within_1_n"])))), " of ", tostring(ev["golden_within_1_n"]))),
+    (print aorder = 3, aspect = "Offline evaluation", corder = 4, check = "Exact agreement with the label",
+        target = "at least __P_golden_exact__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["golden_exact"]) >= __T_golden_exact__,
+        actual = strcat(tostring(tolong(round(todouble(ev["golden_exact"]) * tolong(ev["golden_exact_n"])))), " of ", tostring(ev["golden_exact_n"]))),
+    (print aorder = 3, aspect = "Offline evaluation", corder = 5, check = "Fairness pairs: identity, dialect and verbosity",
+        target = "mean at most __T_identity_mean_abs_diff__, no pair over __T_identity_max_pair_diff__", critical = false, basis = "nightly eval_run event",
+        measured = ran,
+        ok = todouble(ev["identity_mean_abs_diff"]) <= __T_identity_mean_abs_diff__ and todouble(ev["identity_max_pair_diff"]) <= __T_identity_max_pair_diff__
+            and todouble(ev["dialect_verbosity_mean_abs_diff"]) <= __T_dialect_verbosity_mean_abs_diff__ and todouble(ev["dialect_verbosity_max_pair_diff"]) <= __T_dialect_verbosity_max_pair_diff__,
+        actual = strcat("identity ", tostring(round(todouble(ev["identity_mean_abs_diff"]), 3)), ", dialect and verbosity ", tostring(round(todouble(ev["dialect_verbosity_mean_abs_diff"]), 3)))),
+    (print aorder = 3, aspect = "Offline evaluation", corder = 6, check = "Clean answers falsely flagged (golden set)",
+        target = "at most __P_golden_control_review_rate__", critical = false, basis = "nightly eval_run event",
+        measured = ran, ok = todouble(ev["golden_control_review_rate"]) <= __T_golden_control_review_rate__,
+        actual = strcat(tostring(tolong(round(todouble(ev["golden_control_review_rate"]) * tolong(ev["golden_control_review_rate_n"])))), " of ", tostring(ev["golden_control_review_rate_n"]))),
+    (print aorder = 4, aspect = "Online evaluation", corder = 1, check = "p95 latency of completed requests",
+        target = "at most 6 s", critical = false, basis = "live requests",
+        measured = tolong(R["completed"]) > 0, ok = p95_s <= 6.0,
+        actual = strcat(tostring(round(p95_s, 2)), " s")),
+    (print aorder = 4, aspect = "Online evaluation", corder = 2, check = "Availability: non-4xx requests that succeeded",
+        target = "at least 99%", critical = false, basis = "live requests",
+        measured = counted > 0, ok = availability >= 99.0,
+        actual = strcat(tostring(round(availability, 2)), "%")),
+    (print aorder = 4, aspect = "Online evaluation", corder = 3, check = "Control-triggered review rate (live band)",
+        target = "at most 25%", critical = false, basis = "live score spans",
+        measured = n > 0, ok = 100.0 * tolong(L["ctl"]) / n <= 25.0,
+        actual = strcat(tostring(round(100.0 * tolong(L["ctl"]) / n, 1)), "% (", tostring(L["ctl"]), " of ", tostring(n), ")")),
+    (print aorder = 4, aspect = "Online evaluation", corder = 4, check = "Traceable responses: trace id, prompt version and hash, model version, three runs",
+        target = "100%", critical = false, basis = "live score spans",
+        measured = n > 0, ok = tolong(L["trace"]) == n,
+        actual = strcat(tostring(L["trace"]), " of ", tostring(n))),
+    (__STATIC_ROWS__
+        | extend measured = state != "not measured", ok = state == "met")
+| extend state = case(
+    isnotempty(state), state,
+    not(measured), "no data",
+    ok, "met",
+    "missed");
+
+// part: overall
+checks
+| summarize met = countif(state == "met"), counted = countif(state in ("met", "missed")),
+    missed = countif(state == "missed"), critical_missed = countif(critical and state == "missed"),
+    critical_no_data = countif(critical and state == "no data"), not_counted = countif(state in ("no data", "not measured"))
+| project
+    trust_score = iff(counted > 0, round(100.0 * met / counted), real(null)),
+    checks_met = strcat(tostring(met), " of ", tostring(counted)),
+    status = case(
+        critical_missed > 0, "red: a critical check missed",
+        missed > 0, strcat("amber: ", tostring(missed), " check missed, none critical"),
+        critical_no_data > 0, "amber: a critical check has no data in this range",
+        "green: every measured check met"),
+    not_counted
+
+// part: aspects
+checks
+| summarize met = countif(state == "met"), counted = countif(state in ("met", "missed")),
+    critical_missed = countif(critical and state == "missed"), not_counted = countif(state in ("no data", "not measured"))
+    by aorder, aspect
+| order by aorder asc
+| project
+    aspect,
+    score = iff(counted > 0, round(100.0 * met / counted), real(null)),
+    checks_met = strcat(tostring(met), " of ", tostring(counted)),
+    status = case(critical_missed > 0, "red", counted == 0, "no data", met < counted, "amber", "green"),
+    not_counted
+
+// part: detail
+checks
+| order by aorder asc, corder asc
+| project aspect, check, target, actual, state, critical, basis
+
+// part: confidence
+let scored = dependencies
+    | where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+    | where isnotempty(tostring(customDimensions["scorer.score"]))
+    | extend spread = toint(customDimensions["scorer.spread"]);
+let total = toscalar(scored | count);
+scored
+| summarize answers = count() by agreement = case(
+    spread == 0, "1. high: all three runs agree",
+    spread == 1, "2. medium: runs one level apart",
+    "3. low: runs two or more apart, sent to a person")
+| extend share_pct = round(100.0 * answers / total, 1)
+| order by agreement asc

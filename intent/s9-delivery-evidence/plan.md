@@ -25,6 +25,10 @@
 5. Ask the owner once to run the two commands in spec section 6.
 6. Read the workbook back (read-only), check that its items equal the file, and give the owner the portal link. The README row and the walkthrough step went into the S9 pull request itself (decision S9-3).
 
+## Added after agreement: the trust scorecard
+
+At about 16:05 the owner asked for the dashboard to show input and output guards, offline and online evaluation and golden dataset quality, each with a quality score, an overall score, and a confidence for each response, for the CEO and CTO. The design was shown with live figures and agreed at about 16:15 as a first tab of the same workbook, so the owner still deploys once (decision S9-4). Order: write `dashboards/scorecard.kql` and run it read-only against Application Insights; add the tab to the builder and the static rows to the snapshot; tests; regenerate; then step 4 above.
+
 ## Cut if behind
 
 1. The live tiles on the In production tab (keep the deploys table and a link to the operational dashboard).

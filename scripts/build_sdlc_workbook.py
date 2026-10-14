@@ -7,7 +7,9 @@ named queries of `dashboards/queries.kql`, and writes `infra/sdlc_workbook.json`
 `infra/sdlc_dashboard.bicep` deploys (spec section 2 in `intent/s9-delivery-evidence/`).
 Standard library only. The same snapshot and queries give the same file, byte for byte.
 
-The workbook has three tabs: before production, in production and the AI-native SDLC.
+The workbook has four tabs: the trust scorecard, before production, in production and
+the AI-native SDLC. The trust scorecard's query is kept in `dashboards/scorecard.kql`;
+its gate values come from `evals/thresholds.yaml` and its static rows from the snapshot.
 GitHub and repository figures become KQL `datatable` queries, so the workbook calls no
 outside service when it is viewed and holds no token (decision S9-1). The live tiles are
 tiles 1 to 4 of the operational dashboard, word for word, under one time-range parameter.
@@ -33,6 +35,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT_FILE = ROOT / "dashboards" / "sdlc_snapshot.json"
 QUERIES_FILE = ROOT / "dashboards" / "queries.kql"
+SCORECARD_FILE = ROOT / "dashboards" / "scorecard.kql"
+THRESHOLDS_FILE = ROOT / "evals" / "thresholds.yaml"
 WORKBOOK_FILE = ROOT / "infra" / "sdlc_workbook.json"
 
 REPOSITORY_URL = "https://github.com/ranaidrees/answer-scorer"
@@ -65,6 +69,7 @@ DEFAULT_TIME_RANGE_MS = 2_592_000_000  # 30 days
 
 TAB_PARAMETER = "selectedTab"
 TABS = (
+    ("scorecard", "Trust scorecard"),
     ("before", "Before production"),
     ("production", "In production"),
     ("sdlc", "AI-native SDLC"),
@@ -122,6 +127,25 @@ TABLE_COLUMNS: dict[str, dict[str, str]] = {
     "decisions_by_who": {"who": "string", "decisions": "long"},
 }
 CI_RUN_COLUMNS = {"started": "datetime", "job_seconds": "real", "test_seconds": "real"}
+
+# The trust scorecard (decision S9-4): the parts of dashboards/scorecard.kql, the columns
+# of its static rows (all `long` where whole, to match the rows the query prints), and the
+# states a static row may hold.
+SCORECARD_PARTS = ("checks", "overall", "aspects", "detail", "confidence")
+SCORECARD_COLUMNS = {
+    "aorder": "long",
+    "aspect": "string",
+    "corder": "long",
+    "check": "string",
+    "target": "string",
+    "critical": "bool",
+    "basis": "string",
+    "actual": "string",
+    "state": "string",
+}
+STATIC_STATES = ("met", "missed", "not measured")
+THRESHOLD_LINE = re.compile(r"^([a-z0-9_]+): \{(min|max): ([0-9.]+)\}\s*$")
+TOKEN = re.compile(r"__([TP])_([a-z0-9_]+)__")
 
 SOURCE_LINK = {
     "formatters": [
@@ -198,7 +222,14 @@ def kql_long(value: object) -> str:
     return str(value)
 
 
+def kql_bool(value: object) -> str:
+    if not isinstance(value, bool):
+        raise ValueError(f"expected true or false, got {type(value).__name__}")
+    return "true" if value else "false"
+
+
 LITERALS: dict[str, Callable[[object], str]] = {
+    "bool": kql_bool,
     "string": kql_string,
     "datetime": kql_datetime,
     "real": kql_real,
@@ -378,17 +409,18 @@ def introduction(as_of: str) -> dict:
     return text_item(
         "introduction",
         "# Answer scorer: delivery evidence\n\n"
-        "How the answer scorer was delivered: the gates every change passed before production, "
-        "every deploy and the live service against its SLOs, and the stages of the AI-native "
-        "SDLC with who did the work and who decided. Every row links to the page or file it "
-        "came from, in the public repository.\n\n"
+        "How far the answer scorer can be trusted, and how it was delivered: the trust "
+        "scorecard of its guards, evaluations and golden dataset; the gates every change passed "
+        "before production; every deploy and the live service against its SLOs; and the stages "
+        "of the AI-native SDLC with who did the work and who decided. Snapshot rows link to the "
+        "page or file they came from, in the public repository.\n\n"
         f"**Snapshot of {as_of}.** The GitHub and repository figures are a snapshot made by "
         f"[`scripts/sdlc_snapshot.py`]({REPOSITORY_URL}/blob/main/scripts/sdlc_snapshot.py) and "
         f"kept in [`dashboards/sdlc_snapshot.json`]({REPOSITORY_URL}/blob/main/dashboards/sdlc_snapshot.json). "
         "It is refreshed by a pull request, never when the page is viewed, so this page calls "
         "no outside service and holds no token (decision S9-1 in "
         f"[`intent/decisions.md`]({REPOSITORY_URL}/blob/main/intent/decisions.md)). Only the "
-        "tiles under a **Live** heading read Application Insights.\n\n"
+        "trust scorecard and the tiles under a **Live** heading read Application Insights.\n\n"
         f"The live operational view is the workbook **{OPERATIONAL_WORKBOOK}**, in the same "
         "resource group.",
     )
@@ -604,11 +636,187 @@ def ai_native_sdlc(part: dict, as_of: str) -> list[dict]:
     ]
 
 
+# --- The trust scorecard --------------------------------------------------------------------
+
+
+def parse_parts(text: str) -> dict[str, str]:
+    """Each `// part:` block of dashboards/scorecard.kql, without its comment lines."""
+    blocks: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in text.splitlines():
+        header = re.fullmatch(r"// part: ([a-z]+)", line)
+        if header:
+            current = blocks.setdefault(header.group(1), [])
+        elif current is not None and not line.startswith("//"):
+            current.append(line)
+    parts = {name: "\n".join(lines).strip() for name, lines in blocks.items()}
+    if tuple(parts) != SCORECARD_PARTS:
+        raise ValueError(f"dashboards/scorecard.kql must hold the parts {list(SCORECARD_PARTS)}")
+    return parts
+
+
+def parse_thresholds(text: str) -> dict[str, float]:
+    """Gate values of evals/thresholds.yaml, a flat map of metric to one min or max."""
+    values = {}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = THRESHOLD_LINE.match(line)
+        if not match:
+            raise ValueError("evals/thresholds.yaml has a line that is not `metric: {min|max: n}`")
+        values[match.group(1)] = float(match.group(3))
+    return values
+
+
+def static_rows(part: dict) -> str:
+    """The snapshot's scorecard rows as a `datatable` with the scorecard's columns."""
+    rows = rows_of(part, "checks", "trust_scorecard")
+    for number, row in enumerate(rows, start=1):
+        if set(row) != set(SCORECARD_COLUMNS):
+            raise ValueError(
+                f"snapshot: trust_scorecard.checks row {number} needs exactly {list(SCORECARD_COLUMNS)}"
+            )
+        if row["state"] not in STATIC_STATES:
+            raise ValueError(
+                f"snapshot: trust_scorecard.checks row {number} has state {row['state']!r}"
+            )
+    return datatable(
+        SCORECARD_COLUMNS, literal_rows(SCORECARD_COLUMNS, rows, "trust_scorecard.checks")
+    )
+
+
+def fill_scorecard(checks: str, thresholds: dict[str, float], rows: str) -> str:
+    """The `checks` part with every gate value and the static rows written in."""
+
+    def value(match: re.Match) -> str:
+        kind, metric = match.groups()
+        if metric not in thresholds:
+            raise ValueError(
+                f"dashboards/scorecard.kql names {metric}, which evals/thresholds.yaml lacks"
+            )
+        number = thresholds[metric]
+        return f"{number:g}" if kind == "T" else f"{number * 100:g}%"
+
+    filled = TOKEN.sub(value, checks).replace("__STATIC_ROWS__", rows)
+    if re.search(r"__[A-Z]+_[A-Za-z0-9_]*__", filled) or "__STATIC_ROWS__" in filled:
+        raise ValueError("dashboards/scorecard.kql has a token the builder does not fill")
+    if "{" in filled or "}" in filled:
+        raise ValueError(
+            "the scorecard query holds a curly bracket, which a workbook reads as a parameter"
+        )
+    return filled
+
+
+def scorecard_query(name: str, query: str, size: int, title: str, no_data: str, tab: str) -> dict:
+    content = query_content(query, size, title, no_data)
+    content.update(
+        timeContextFromParameter="TimeRange",
+        queryType=0,
+        resourceType=RESOURCE_TYPE,
+        visualization="table",
+    )
+    return item(3, content, name, tab)
+
+
+def trust_scorecard(
+    part: dict, parts: dict[str, str], thresholds: dict[str, float], as_of: str
+) -> list[dict]:
+    tab = "scorecard"
+    checks = fill_scorecard(parts["checks"], thresholds, static_rows(part))
+    no_data = "No data in this time range. Widen the time range: the nightly eval runs once a day."
+    return [
+        text_item(
+            "scorecard heading",
+            "## Trust scorecard\n\n"
+            "Every gated check on the scorer, grouped in five aspects: input guards, output guards, "
+            "offline evaluation, online evaluation and the golden dataset. The **trust score** is the "
+            "share of measured checks that are met. A check is **critical** when a miss means a "
+            "person may not see an answer they should; a critical miss makes the status red "
+            "whatever the score. Live checks read Application Insights over the time range at the "
+            "top of the page; offline checks read the newest nightly eval run in that range; gate "
+            "values come from [`evals/thresholds.yaml`]"
+            f"({REPOSITORY_URL}/blob/main/evals/thresholds.yaml), so the scorecard and the eval gate "
+            "cannot disagree. The golden dataset rows and the stability proof come from the "
+            f"snapshot of {as_of}. The query is kept in "
+            f"[`dashboards/scorecard.kql`]({REPOSITORY_URL}/blob/main/dashboards/scorecard.kql).",
+            tab,
+        ),
+        scorecard_query(
+            "scorecard overall",
+            checks + "\n" + parts["overall"],
+            4,
+            "Trust score: the share of measured checks met, and the status",
+            no_data,
+            tab,
+        ),
+        scorecard_query(
+            "scorecard aspects",
+            checks + "\n" + parts["aspects"],
+            3,
+            "Score per aspect: checks met of checks measured",
+            no_data,
+            tab,
+        ),
+        text_item(
+            "scorecard validity",
+            "**Validity: not established.** Agreement with trained human raters has not been "
+            "measured: the labels were written and audited by Claude agents on synthetic answers. "
+            "The trust score shows that the controls work and behave consistently; it does not "
+            "show that the scores are right.",
+            tab,
+            style="warning",
+        ),
+        scorecard_query(
+            "scorecard confidence",
+            parts["confidence"],
+            3,
+            "Confidence in each response: how far its three runs agree (live)",
+            "No scored request in this time range.",
+            tab,
+        ),
+        text_item(
+            "scorecard confidence note",
+            "Every response returns its three runs, the spread, evidence quotes checked against "
+            "the answer, the review reasons, the prompt and model version and a trace id. Run "
+            "agreement is a consistency signal, not a calibrated probability that the score is "
+            "right; an answer whose runs are two or more levels apart always goes to a person.",
+            tab,
+        ),
+        scorecard_query(
+            "scorecard checks",
+            checks + "\n" + parts["detail"],
+            0,
+            "The checks behind the score: target, actual value and state",
+            no_data,
+            tab,
+        ),
+        caption(
+            tab,
+            "A high trust score shows that the guards route what they should and that the scorer "
+            "meets its gates on the golden set, not that its scores match a trained rater.",
+            as_of,
+        ),
+    ]
+
+
 # --- The workbook ---------------------------------------------------------------------------
 
 
-def build(snapshot: dict, queries: dict) -> dict:
-    """The workbook for one snapshot. `queries` maps a query name to its text."""
+def build(
+    snapshot: dict,
+    queries: dict,
+    scorecard: str | None = None,
+    thresholds: str | None = None,
+) -> dict:
+    """The workbook for one snapshot. `queries` maps a query name to its text;
+    `scorecard` and `thresholds` are the texts of dashboards/scorecard.kql and
+    evals/thresholds.yaml, read from the repository when not given."""
+    if scorecard is None:
+        scorecard = SCORECARD_FILE.read_text(encoding="utf-8")
+    if thresholds is None:
+        thresholds = THRESHOLDS_FILE.read_text(encoding="utf-8")
+    parts = parse_parts(scorecard)
+    gate_values = parse_thresholds(thresholds)
     if not isinstance(snapshot, dict):
         raise ValueError("snapshot: expected a JSON object")
     try:
@@ -621,6 +829,7 @@ def build(snapshot: dict, queries: dict) -> dict:
         introduction(as_of),
         parameters(),
         tabs(),
+        *trust_scorecard(section(snapshot, "trust_scorecard"), parts, gate_values, as_of),
         *before_production(section(snapshot, "before_production"), as_of),
         *in_production(section(snapshot, "in_production"), queries, as_of),
         *ai_native_sdlc(section(snapshot, "ai_native_sdlc"), as_of),

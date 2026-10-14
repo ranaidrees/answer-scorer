@@ -20,7 +20,8 @@ Chosen: the snapshot for GitHub and repository figures, embedded as KQL `datatab
 | File | What it is |
 |---|---|
 | `scripts/sdlc_snapshot.py` | Reads GitHub with the signed-in `gh` CLI (read-only calls) and the repository; writes `dashboards/sdlc_snapshot.json`. Never prints a token or an email address |
-| `dashboards/sdlc_snapshot.json` | The snapshot, committed. Schema in section 3 |
+| `dashboards/sdlc_snapshot.json` | The snapshot, committed. Schema in section 3, plus `trust_scorecard.checks` (section 4a) |
+| `dashboards/scorecard.kql` | The trust scorecard query (section 4a) |
 | `scripts/build_sdlc_workbook.py` | Turns the snapshot, plus four tile queries from `dashboards/queries.kql`, into `infra/sdlc_workbook.json`. Deterministic: the same snapshot gives the same file |
 | `infra/sdlc_workbook.json` | The workbook layout and queries. No resource ID |
 | `infra/sdlc_dashboard.bicep` | One workbook, bound to Application Insights by name at deploy time, as `observability.bicep` does |
@@ -62,6 +63,16 @@ Every `figures` row has the four keys shown, all strings. Every `source` starts 
 **AI-native SDLC.** Stages table from spec section 10 of the main spec: stage, artifact, gate, who decides. Figures: commits on merged pull request branches that carry the agent's co-author line, of all of them; decisions by who (agent, owner, rule, shared), from `intent/decisions.md`, also as a bar chart; owner deploy approvals; verifier FAIL verdicts and Important review findings fixed before merge (from the README scoreboard); first intent commit to first approved deploy.
 
 Every tab ends with a caption: the data is synthetic; reliability is not validity; every review counted here was made by an AI agent, not a person.
+
+## 4a. Trust scorecard (decision S9-4)
+
+The first tab. Its query is kept in `dashboards/scorecard.kql` in five parts: `checks` (one row per check), and the `overall`, `aspects` and `detail` tails that follow it, and `confidence`, which stands alone.
+
+- **Checks.** Input guards: injection flagged and routed, injection does not raise the score, live injected answers sent to a person, edge cases. Output guards: ungrounded quotes, live tripped controls sent to a person, live scores of 1 or 2 sent to a person. Offline evaluation: gate result, kappa, within-1, exact, fairness pairs, falsely flagged clean answers, the stability proof. Online evaluation: p95 latency, availability, the 25% review band, traceable responses. Golden dataset: sizes, coverage, label provenance, the blind audit, and human labels (not measured).
+- **Sources.** Live checks read requests and `score` spans over the time range. Offline checks read the newest nightly `eval_run` event, which carries every metric. Gate values are filled from `evals/thresholds.yaml` when the workbook is built. The stability proof and the dataset checks are snapshot rows (`trust_scorecard.checks`), computed from the dataset files.
+- **Score.** The trust score is the share of measured checks that are met; each aspect's score is the same over its own checks. State is met, missed, no data or not measured; only met and missed count. A check is critical when a miss means a person may not see an answer they should. A critical miss makes the status red, any other miss amber.
+- **Confidence.** Each live response's three runs: high when all agree, medium when they are one level apart, low when they are two or more apart (always routed). It is a consistency signal, not a calibrated probability, and the page says so.
+- **Validity.** A warning panel says agreement with trained raters is not measured.
 
 ## 5. Tests
 

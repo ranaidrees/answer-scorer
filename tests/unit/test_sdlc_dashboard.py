@@ -30,7 +30,14 @@ CI_FILE = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 THIS_FILE = Path(__file__).resolve()
 
 REPO = "https://github.com/ranaidrees/answer-scorer"
-TABS = {"before": "Before production", "production": "In production", "sdlc": "AI-native SDLC"}
+TABS = {
+    "scorecard": "Trust scorecard",
+    "before": "Before production",
+    "production": "In production",
+    "sdlc": "AI-native SDLC",
+}
+SCORECARD_FILE = REPO_ROOT / "dashboards" / "scorecard.kql"
+THRESHOLDS_FILE = REPO_ROOT / "evals" / "thresholds.yaml"
 LIVE_QUERIES = (
     "tile1_requests_latency",
     "tile2_review_rate_by_reason",
@@ -121,6 +128,32 @@ def fixture_snapshot() -> dict:
                 {"who": "owner", "decisions": 1},
             ],
         },
+        "trust_scorecard": {
+            "checks": [
+                {
+                    "aorder": 5,
+                    "aspect": "Golden dataset quality",
+                    "corder": 1,
+                    "check": 'Sizes as "specified"',
+                    "target": "30, 16, 24, 6",
+                    "critical": False,
+                    "basis": "evals/datasets",
+                    "actual": "30, 16, 24, 6",
+                    "state": "met",
+                },
+                {
+                    "aorder": 5,
+                    "aspect": "Golden dataset quality",
+                    "corder": 2,
+                    "check": "Labels from trained human raters",
+                    "target": "not set",
+                    "critical": False,
+                    "basis": "not done",
+                    "actual": "0 of 30",
+                    "state": "not measured",
+                },
+            ]
+        },
     }
 
 
@@ -169,7 +202,7 @@ def strings(node) -> list[str]:
 # --- The builder ----------------------------------------------------------------------------
 
 
-def test_the_workbook_has_three_tabs_and_every_item_after_them_shows_on_one_tab():
+def test_the_workbook_has_four_tabs_and_every_item_after_them_shows_on_one_tab():
     book = built()
     assert book["version"] == "Notebook/1.0" and "fallbackResourceIds" not in book
     assert [entry["name"] for entry in book["items"][:3]] == ["introduction", "parameters", "tabs"]
@@ -242,7 +275,7 @@ def test_the_parameters_are_a_30_day_time_range_and_a_hidden_tab_parameter():
     assert (tab["name"], tab["type"], tab["value"], tab["isHiddenWhenLocked"]) == (
         "selectedTab",
         1,
-        "before",
+        "scorecard",
         True,
     )
 
@@ -262,7 +295,12 @@ def test_the_two_query_parsers_agree():
 
 def test_the_live_tiles_are_tiles_1_to_4_of_the_queries_file_word_for_word():
     book = built()
-    live = [entry for entry in book["items"] if "timeContextFromParameter" in entry["content"]]
+    live = [
+        entry
+        for entry in book["items"]
+        if "timeContextFromParameter" in entry["content"]
+        and not entry["name"].startswith("scorecard")
+    ]
     expected = load_queries()
     assert [entry["content"]["query"] for entry in live] == [
         expected[name]["text"] for name in LIVE_QUERIES
@@ -282,6 +320,91 @@ def test_the_live_tiles_are_tiles_1_to_4_of_the_queries_file_word_for_word():
         for key in ("title", "noDataMessage", "size", "visualization", "queryType"):
             assert content[key] == existing[key], (entry["name"], key)
         assert content["resourceType"] == "microsoft.insights/components"
+
+
+def test_the_scorecard_tab_shows_score_aspects_validity_confidence_and_checks():
+    names = [entry["name"] for entry in tab_items(built())["scorecard"]]
+    assert names == [
+        "scorecard heading",
+        "scorecard overall",
+        "scorecard aspects",
+        "scorecard validity",
+        "scorecard confidence",
+        "scorecard confidence note",
+        "scorecard checks",
+        "scorecard caption",
+    ]
+    book = built()
+    validity = named(book, "scorecard validity")["content"]
+    assert validity["style"] == "warning" and "not established" in validity["json"]
+    assert (
+        "not a calibrated probability"
+        in named(book, "scorecard confidence note")["content"]["json"]
+    )
+    for name in (
+        "scorecard overall",
+        "scorecard aspects",
+        "scorecard checks",
+        "scorecard confidence",
+    ):
+        content = named(book, name)["content"]
+        assert content["timeContextFromParameter"] == "TimeRange", name
+        assert (content["queryType"], content["visualization"]) == (0, "table"), name
+
+
+def test_the_scorecard_queries_are_the_parts_of_its_file_with_every_token_filled():
+    parts = builder.parse_parts(read(SCORECARD_FILE))
+    assert tuple(parts) == ("checks", "overall", "aspects", "detail", "confidence")
+    book = built()
+    filled = builder.fill_scorecard(
+        parts["checks"],
+        builder.parse_thresholds(read(THRESHOLDS_FILE)),
+        builder.static_rows(fixture_snapshot()["trust_scorecard"]),
+    )
+    for name, part in (
+        ("scorecard overall", "overall"),
+        ("scorecard aspects", "aspects"),
+        ("scorecard checks", "detail"),
+    ):
+        assert named(book, name)["content"]["query"] == filled + "\n" + parts[part], name
+    assert named(book, "scorecard confidence")["content"]["query"] == parts["confidence"]
+    for entry in book["items"]:
+        if entry["name"].startswith("scorecard") and entry["type"] == 3:
+            query = entry["content"]["query"]
+            assert not re.search(r"__[A-Z]+_", query), entry["name"]
+            assert "{" not in query and "}" not in query, entry["name"]
+
+
+def test_the_scorecard_gate_values_are_those_of_the_thresholds_file():
+    thresholds = builder.parse_thresholds(read(THRESHOLDS_FILE))
+    filled = named(built(), "scorecard checks")["content"]["query"]
+    assert f">= {thresholds['golden_qwk']:g}" in filled
+    assert f"<= {thresholds['ungrounded_quote_rate']:g}" in filled
+    assert f'"at most {thresholds["golden_control_review_rate"] * 100:g}%"' in filled
+    assert f'"at least {thresholds["golden_within_1"] * 100:g}%"' in filled
+    used = set(re.findall(r"__[TP]_([a-z0-9_]+)__", read(SCORECARD_FILE)))
+    assert used <= set(thresholds), "every gate the scorecard names is in thresholds.yaml"
+
+
+def test_scorecard_static_rows_are_typed_and_their_states_are_limited():
+    rows = builder.static_rows(fixture_snapshot()["trust_scorecard"])
+    assert rows.startswith(
+        "datatable(aorder: long, aspect: string, corder: long, check: string, target: string, "
+        "critical: bool, basis: string, actual: string, state: string) [\n"
+    )
+    assert '"Sizes as \\"specified\\""' in rows and ", false, " in rows
+    bad = fixture_snapshot()["trust_scorecard"]
+    bad["checks"][0]["state"] = "great"
+    with pytest.raises(ValueError):
+        builder.static_rows(bad)
+    bad = fixture_snapshot()["trust_scorecard"]
+    bad["checks"][0]["critical"] = "no"
+    with pytest.raises(ValueError):
+        builder.static_rows(bad)
+    with pytest.raises(ValueError):
+        builder.fill_scorecard("x __T_no_such_metric__", {}, "datatable(a: long) []")
+    with pytest.raises(ValueError):
+        builder.fill_scorecard("x | where a == 1 { }", {}, "")
 
 
 def test_the_production_tab_shows_deploys_then_figures_then_the_live_tiles():
