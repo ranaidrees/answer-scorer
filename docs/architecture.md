@@ -39,7 +39,7 @@ The Container App starts on a placeholder image (`mcr.microsoft.com/k8se/quickst
 
 ## Identities
 
-No key is used for the model or for Azure access. Application Insights receives telemetry with a connection string that holds an instrumentation key, which Microsoft does not treat as a credential ([LLMOps, section 1](llmops.md#1-what-plays-the-part-of-an-llm-observability-tool-such-as-langfuse)). Three user-assigned managed identities, each with one role on one resource:
+No key is used for the model or for Azure access. Application Insights receives telemetry with a connection string that holds an instrumentation key, which Microsoft does not treat as a credential; Entra-only ingestion is off, so the string is still kept as a secret ([LLMOps, section 1](llmops.md#1-what-plays-the-part-of-an-llm-observability-tool-such-as-langfuse)). Three user-assigned managed identities, each with one role on one resource:
 
 | Identity | Used by | Role | Scope | Created by |
 |---|---|---|---|---|
