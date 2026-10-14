@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Wednesday 14 October 2026, about 16:00 (Phase 3, on branch `p3-wording`, after #20 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
+Last updated: Wednesday 14 October 2026, about 17:15 (Phase 3, on branch `s9-records`, after #22 merged and the owner's apply). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
 
 **Phase 3 so far.**
 - **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
@@ -263,6 +263,8 @@ Last updated: Wednesday 14 October 2026, about 16:00 (Phase 3, on branch `p3-wor
 | 18 | S5b follow-up: screenshot `01`, the merge count after #17, the CI review nits of #17 | verifier PASS; security review and CI review: no Important findings |
 | 19 | S6b: dashboard tiles 5 and 6, a links header, `docs/llmops.md` | verifier PASS after two FAILs; security review: two Important findings, both fixed; CI review: no Important findings. The observability deployment that makes the tiles live is the owner's |
 | 20 | P3-11: pull requests #1 and #14 closed, the deploy retry recorded, the next-session brief | CI review: no Important findings, one nit |
+| 21 | S9: delivery evidence dashboard with a trust scorecard (its own intent, spec and plan in `intent/s9-delivery-evidence/`) | verifier PASS at `51ad222` after three FAILs; security reviews: seven Important findings in all, all fixed; CI review: no Important findings, no nits |
+| 22 | P3-12: wording corrections deferred from #19, records after #20 | verifier PASS at `0622a1e` after five FAILs; security review: no Important findings; CI review: no Important findings, one nit (fixed in this branch) |
 
 #3 is closed, not merged. #1 and #14 were closed without merging at the owner's request on 14 October (decision P3-11).
 
@@ -276,7 +278,9 @@ Last updated: Wednesday 14 October 2026, about 16:00 (Phase 3, on branch `p3-wor
 
 **Merged in #20:** decision P3-11 (pull requests #1 and #14 closed at the owner's request; the second denial of the observability deployment) and `next-session-prompt.md`, the brief for the next session's AI-native SDLC evidence dashboard.
 
-**This branch (`p3-wording`):** decision P3-12, the wording notes deferred from #19: what uses a key and what does not, the CI review coverage lists, tile 6's no-data message, the tile counts and the verifier count. **Next:** the owner applies the observability deployment, then H4.
+**Merged in #21:** S9, decisions S9-1 to S9-4: the delivery evidence workbook, opening on a trust scorecard. **Merged in #22:** decision P3-12, the wording notes deferred from #19.
+
+**The owner's apply (decision S9-5):** both workbooks are live and read back equal to their files. **This branch (`s9-records`):** decision S9-5 and these records. **Next:** H4.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt had passed nine of its ten full runs at the end of Phase 2; with the CI gate run on #16 and the first nightly run, both PASS, it has passed eleven of its twelve.
 
@@ -309,7 +313,7 @@ Done by the owner on 14 October: the `ghcr.io` package made public; the run for 
 2. **The branch of closed pull request #1.** Delete it if wanted (decision D20); the lead leaves deletions to the owner.
 3. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
 4. **Judge the four actions taken after denials on 14 October**, listed under "Denied actions" below: the `poe check` rerun, the Read and Grep, the read-only preview, and the second attempt at the observability deployment, which was a retry of a denied action. Say whether any counts as working round a denial.
-5. **Apply the observability deployment for tiles 5 and 6** (decision P3-10): the `az deployment group create` command for `infra/observability.bicep` in the pull request that adds the tiles. Auto mode denied it to the lead; its read-only preview touches only the workbook, the two alert rules and the action group.
+5. **Done on 14 October (decision S9-5):** both workbooks are live. Optional: apply `infra/observability.bicep` once more, with the confirmed alert address typed in place of the sign-in name, to bring tile 6's no-data message from #22 live; the deploy runs queued by the merges of #21 and #22 change no application code, to approve or reject. Earlier text of this item: the `az deployment group create` command for `infra/observability.bicep` in the pull request that adds the tiles. Auto mode denied it to the lead; its read-only preview touches only the workbook, the two alert rules and the action group.
 6. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
 
 **Denied actions, for the record (one was retried once: the observability deployment, decision P3-11; where an equivalent action followed a denial, it is said below with the reason, for the owner to judge):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting, which the owner then switched on; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
