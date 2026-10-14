@@ -32,7 +32,7 @@ Commands the verifier ran: `uv run poe check` ("All checks passed!", "90 files a
 | Pull requests with AI review findings and verifier verdicts | MET (live, 14 October) | They are comments on the pull requests. For example, `claude[bot]` posted "Review against REVIEW.md" on #4 (decision P3-4), and its review on #15 rates two findings Important. Decisions D13, D17, D18 and D25 corroborate |
 | A decisions log that says who or what made each decision | MET | `intent/decisions.md`: every row has a Who value |
 | The owner's approval before each deploy | MET (live, 14 October) | The first deploy, the `deploy` run for #16, waited on the `demo` environment and was approved by the owner; GitHub's approvals record for the run names the owner. Its provenance check ran before any change (decision P3-2). Of the older runs, the owner rejected the one queued by #10, and the ones queued by #11 and #13 were cancelled; none of them deployed |
-| The walkthrough in eight minutes, with a five-minute cut and screenshots as a fallback | PENDING LIVE | `docs/walkthrough.md` has the script, the cut and a fallback per step. Four screenshots of GitHub pages are committed so far; the rest wait for the owner (the demo token for the live app, a sign-in for the portal), and the rehearsal is the owner's (plan H4). See `docs/screenshots/README.md` |
+| The walkthrough in eight minutes, with a five-minute cut and screenshots as a fallback | PENDING LIVE | `docs/walkthrough.md` has the script, the cut and a fallback per step. Seven screenshots are committed: four of GitHub pages and three of the live app's result cards. The three portal ones need the owner's sign-in, `01` is retaken once the updated README is on `main`, and the rehearsal is the owner's (plan H4). See `docs/screenshots/README.md` |
 
 ## Functional requirements
 
@@ -94,4 +94,4 @@ Every test named here passed in the run above, except the three start-up tests, 
 
 GitHub state (the ruleset, the `demo` reviewer, review comments, CodeQL, the waiting deploy run), Azure state (every deployed resource, the workbook as rendered, the alert email), and all live behaviour (the live URL, a real guardrail block, the page in a browser).
 
-The Phase 3 re-check saw the GitHub state it cites, the deployed app's answers and its telemetry. It still did not see the workbook as rendered in the portal, an alert email (the address awaits the owner's passcode, decision S6-7), or a real guardrail block, and CodeQL default setup is still off.
+The Phase 3 re-check saw the GitHub state it cites, the deployed app's answers and its telemetry. It still did not see the workbook as rendered in the portal, an alert email (the address awaits the owner's passcode, decision S6-7), or a real guardrail block. CodeQL default setup was switched on by the owner on 14 October (Python and GitHub Actions), and its first analysis passed.

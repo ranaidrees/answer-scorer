@@ -96,8 +96,8 @@ An AI coding agent, Claude Code, wrote everything that came after the intent, th
 **Decisions only the owner made, or still has to make**
 
 - Made: the [intent](intent/intent.md), and the 21 design decisions C1 to C21 in [the spec](intent/spec.md), section 13. In the build session on 13 October: switching on email privacy for the account and asking for the stack to be merged (decision D19), and accepting decision S4c-8, under which the unit tests follow the registry's active prompt instead of pinning `v1` (decision S4c-14).
-- On 14 October: making the container image public, approving the first deploy (the run for #16) and rejecting an older run that would have stopped at sign-in.
-- Still to make: approving every later deploy; closing pull request #1; what to do with Dependabot's pull request #14; confirming the alert email address with Azure's passcode (decision S6-7); switching CodeQL default setup on; any loosening of a threshold (none has been asked for); and the final acceptance.
+- On 14 October: making the container image public; approving the first deploy (the run for #16) and rejecting an older run that would have stopped at sign-in; dispatching and approving the `warm` and `image_sha` routes (decision P3-6); and switching CodeQL default setup on.
+- Still to make: approving every later deploy; closing pull request #1; what to do with Dependabot's pull request #14; confirming the alert email address with Azure's passcode (decision S6-7); any loosening of a threshold (none has been asked for); and the final acceptance.
 
 **What no person has reviewed**
 

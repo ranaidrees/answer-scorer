@@ -1,13 +1,13 @@
 # Screenshots
 
-The fallback pictures for the [walkthrough](../walkthrough.md), one per step. The application is deployed (14 October). Pictures of GitHub pages were taken by the lead session as a visitor who is not signed in, in a browser with a fresh profile, so they show what the public sees: GitHub shows the merge box of a pull request only to signed-in users, so `07-weak-prompt-pr.png` shows the gate's own comment instead. Profile pictures are hidden in every picture. Every file not yet in this folder is pending live.
+The fallback pictures for the [walkthrough](../walkthrough.md), one per step. The application is deployed (14 October). Pictures of GitHub pages were taken by the lead session as a visitor who is not signed in, in a browser with a fresh profile, so they show what the public sees: GitHub shows the merge box of a pull request only to signed-in users, so `07-weak-prompt-pr.png` shows the gate's own comment instead. Profile pictures are hidden in every picture. The live app pictures show the result card only, so neither the address bar nor the token field is in them. Every file not yet in this folder is pending live.
 
 | File | Shows | Walkthrough step | Taken by | State |
 |---|---|---|---|---|
 | `01-readme-scoreboard.png` | The README's results scoreboard with the disclaimer above it | 1 | Lead or owner | Pending live |
-| `02-app-strong.png` | The live app after "Strong answer": score, highlighted evidence, runs, spread, notice | 2 (J1) | Lead or owner | Pending live |
-| `03-app-injection.png` | The live app after "Injection attempt": the review reasons and "Injection detected: yes" | 2 (J2) | Lead or owner | Pending live |
-| `04-app-weak.png` | The live app after "Weak answer": a low score sent to a person | 2 (J3) | Lead or owner | Pending live |
+| `02-app-strong.png` | The live app's result card after "Strong answer": 5 / 5, runs 4, 5, 5, four highlighted quotes, no review trigger, the notice | 2 (J1) | Lead, after the owner saved the demo token | 14 October 2026 |
+| `03-app-injection.png` | The live app's result card after "Injection attempt": 2 / 5, runs 2, 2, 2, the two review reasons and "Injection detected: yes" | 2 (J2) | Lead, after the owner saved the demo token | 14 October 2026 |
+| `04-app-weak.png` | The live app's result card after "Weak answer": 1 / 5, a low score sent to a person | 2 (J3) | Lead, after the owner saved the demo token | 14 October 2026 |
 | `05-foundry-deployment.png` | The `scorer-mini` deployment: pinned version, no automatic upgrade, guardrail | 3 | Owner (portal) | Pending live |
 | `06-appinsights-trace.png` | One `score` span with its `scorer.*` properties and no answer text | 3 | Owner (portal) | Pending live |
 | `07-weak-prompt-pr.png` | The weak-prompt pull request: the comment the required `evals` check posted, "Eval gate: FAIL", with every metric and the three it breached | 4 | Lead | 14 October 2026 |
