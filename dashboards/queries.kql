@@ -258,6 +258,41 @@ daily
     off_topic_pct = round(100.0 * off_topic / scores, 1)
 | order by day asc
 
+// name: tile6_requests_to_look_at
+// Tile 6, table. The newest scored requests, one row each, with the trace id that opens
+// the request's full trace in Application Insights (transaction search). Requests where a
+// control tripped (any review reason other than the adverse-score rule alone) or whose
+// scoring took longer than 6 s come first, then the rest, newest first, at most 50 rows.
+// `pipeline_s` is the duration of the `score` span (the guards and the three model calls);
+// the SLO itself is measured on the whole HTTP request, on tile 1. Every column is
+// metadata: no answer, question, rationale or quote is recorded, and the per-answer hash
+// is left out. It is the place to start when a reviewer, an alert or a reported problem
+// names a request.
+dependencies
+| where name == "score" and isnotempty(tostring(customDimensions["scorer.request_id"]))
+| extend reasons_text = tostring(customDimensions["scorer.review_reasons"])
+| extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, ","))
+| extend control_triggered = array_length(set_difference(reason_list, dynamic(["adverse_score"]))) > 0
+| project
+    timestamp,
+    trace_id = operation_Id,
+    competency = tostring(customDimensions["scorer.competency"]),
+    score = tostring(customDimensions["scorer.score"]),
+    runs = tostring(customDimensions["scorer.runs"]),
+    spread = tostring(customDimensions["scorer.spread"]),
+    review_reasons = reasons_text,
+    control_triggered,
+    pipeline_s = round(duration / 1000.0, 2),
+    tokens_in = tolong(customDimensions["scorer.tokens_in"]),
+    tokens_out = tolong(customDimensions["scorer.tokens_out"]),
+    cost_gbp = round(todouble(customDimensions["scorer.cost_estimate_gbp"]), 5),
+    prompt_version = tostring(customDimensions["scorer.prompt_version"]),
+    model_version = format_datetime(todatetime(customDimensions["scorer.model_version"]), "yyyy-MM-dd")
+| extend look_first = control_triggered or pipeline_s > 6.0
+| order by look_first desc, timestamp desc
+| take 50
+| project-away look_first
+
 // name: alert_latency_p95
 // Alert "p95 latency over 6 s". The rule runs this over a 15-minute window and fires
 // when it returns a row. It returns a row only when the p95 of completed requests in the

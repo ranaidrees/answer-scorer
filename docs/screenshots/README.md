@@ -13,7 +13,7 @@ The fallback pictures for the [walkthrough](../walkthrough.md), one per step. Th
 | `07-weak-prompt-pr.png` | The weak-prompt pull request: the comment the required `evals` check posted, "Eval gate: FAIL", with every metric and the three it breached | 4 | Lead | 14 October 2026 |
 | `08-ci-run.png` | One `ci` run, the one on #16, green. GitHub shows a run's steps only to signed-in users, so the steps are on the run's page, not in the picture | 5 | Lead | 14 October 2026 |
 | `09-deploy-approval.png` | The first deploy run (for #16): both jobs green, and "Deployment protection rules" naming the owner as approver of `demo`. The provenance step is inside the `deploy` job's log | 5 | Lead | 14 October 2026 |
-| `10-dashboard.png` | The workbook's four tiles with data | 6 | Owner (portal) | Pending live |
+| `10-dashboard.png` | The workbook's six tiles with data (tiles 5 and 6 after the observability deployment) | 6 | Owner (portal) | Pending live |
 | `11-pull-requests.png` | The pull request list with each one's check results (the verifier verdicts and review findings are comments inside each pull request) | 7 | Lead | 14 October 2026 |
 
 The runbook's final test asks the owner for three of these at least: the Foundry model deployment, the J1 trace in Application Insights, and the approved deployment in GitHub. A recording of one rehearsal is the owner's second fallback; link it from the README when it exists.

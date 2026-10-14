@@ -230,7 +230,7 @@ Already cut by review: Maintain loop, Prompt Shields, Foundry evaluation view, c
 
 ## Status
 
-Last updated: Wednesday 14 October 2026, about 13:15 (Phase 3, on branch `s5b-followup`, after #17 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
+Last updated: Wednesday 14 October 2026, about 14:05 (Phase 3, on branch `s6b-llmops-drift`, after #18 merged). The live figures below are as of the dashboard queries at about 09:05; the `image_sha` smoke test and the three screenshot scores came later and add 6 scores, about 0.03 GBP.
 
 **Phase 3 so far.**
 - **First deploy done.** The owner made the `ghcr.io` package public and approved the `deploy` run for #16. It verified provenance, signed in as `id-deploy` with the `environment:demo` subject, created revision 4 and passed smoke 6 of 6. That settles the three "to confirm" points (decision P3-2).
@@ -270,7 +270,7 @@ Pull request #1 is still open for the owner to close. #3 is closed, not merged. 
 
 **Merged in #18:** screenshot `01`; the merge count brought up to date after #17; the two nits from the CI review of #17; decision P3-9.
 
-**This branch (`s6b-llmops-drift`):** dashboard tile 5 (live drift by day) and `docs/llmops.md`, decision P3-10. **Next:** the owner applies the observability deployment, then H4, in which the owner takes `05`, `06` and `10`.
+**This branch (`s6b-llmops-drift`):** dashboard tiles 5 (live drift by day) and 6 (requests to look at), a links header in the workbook, and `docs/llmops.md`, decision P3-10. **Next:** the owner applies the observability deployment, then H4, in which the owner takes `05`, `06` and `10`.
 
 **Stability proof (spec section 7), decision S4c-11.** Accepted prompt `v1`, never tuned: three full runs in a row on one commit, all PASS (`20261013T202107Z`, `20261013T202848Z`, `20261013T203628Z`; kappa 0.926, 0.947, 0.926). It took three attempts to get them: one run failed on a `dev` edge case (fixed in code, S4c-3) and one was lost to an unavailable model (S4c-6, S4c-9). Weak prompt `v0-weak`: three full runs in a row, all FAIL, each on ungrounded quotes and the control-triggered review rate. Thresholds are at the spec's values; none was loosened. Known limit: the identity-pair mean difference sat on its limit in 2 of the first 8 live runs (S4c-12), and in the first CI gate run on #13 two other metrics sat on theirs (within-1 agreement 27 of 30, dialect and verbosity mean 0.250). The accepted prompt had passed nine of its ten full runs at the end of Phase 2; with the CI gate run on #16 and the first nightly run, both PASS, it has passed eleven of its twelve.
 
@@ -302,21 +302,21 @@ Done by the owner on 14 October: the `ghcr.io` package made public; the run for 
 1. **Portal screenshots** `05-foundry-deployment.png`, `06-appinsights-trace.png` and `10-dashboard.png`, which need your sign-in. They can wait for H4.
 2. **Pull request #1.** Close it without merging and delete its branch (decision D20). **Pull request #14** (Dependabot, a base image bump to a release candidate): close it or leave it; the agent has not touched it.
 3. **The log of the first `evals` run on pull request #9.** It shows sign-in identifiers (not credentials) in plain text. They are contained: the values are secrets now. Whether to delete that run's logs is the owner's call; the lead has not deleted any.
-4. **Judge the two actions taken after denials on 14 October**, listed under "Denied actions" below: say whether either counts as working round a denial.
-5. **Apply the observability deployment for tile 5** (decision P3-10): the `az deployment group create` command for `infra/observability.bicep` in the pull request that adds the tile. Auto mode denied it to the lead; its read-only preview touches only the workbook, the two alert rules and the action group.
+4. **Judge the three actions taken after denials on 14 October**, listed under "Denied actions" below (the third is a read-only preview): say whether any counts as working round a denial.
+5. **Apply the observability deployment for tiles 5 and 6** (decision P3-10): the `az deployment group create` command for `infra/observability.bicep` in the pull request that adds the tile. Auto mode denied it to the lead; its read-only preview touches only the workbook, the two alert rules and the action group.
 6. **After the walkthrough:** switch the nightly eval schedule off (about 0.42 GBP a night) and set the app's minimum replicas back to 0.
 
 **Denied actions, for the record (none retried as it was; where an equivalent action followed, it is said below with the reason, for the owner to judge):** a merge before email privacy was on; an integration branch that would have landed pull requests without a merge made by GitHub (denied as a CI bypass); the CodeQL setting, which the owner then switched on; and one attempt by the second lead to stop its own duplicate eval run by process id, after which it used the session's own stop control. On 14 October:
 - the lead's dispatch of the `warm` route, denied as a production deploy. Nothing was tried in its place; the owner dispatched both routes (decisions P3-3, P3-6);
 - one `uv run poe check` piped into `tail`, denied as weakening security. The lead then ran `uv run poe check` exactly as it stands in the project's allow list. Its reason: the check is the command `CLAUDE.md` requires before any pull request, and the denial looked aimed at the pipe, not at the check;
 - one read-only `sed` and `grep` over `pyproject.toml` and two scripts, denied as a production deploy straight after the dispatch denial. The lead then read the same lines with the Read and Grep tools. Its reason: reading files in the repository changes nothing, and the denial message itself pointed to other tools for a harmless action. If the owner sees either of these two as working round a denial, that judgement is the owner's.
-- the lead's `az deployment group create` for `infra/observability.bicep` (tile 5), denied as a blind apply. The lead then ran the read-only `what-if` preview, the safer method the denial message pointed to, and left the apply to the owner ("Needs owner" item 5).
+- the lead's `az deployment group create` for `infra/observability.bicep` (tiles 5 and 6), denied as a blind apply. The lead then ran the read-only `what-if` preview, the safer method the denial message pointed to, and left the apply to the owner ("Needs owner" item 5).
 
 ## Deviations
 
 - **Phase 3: the owner dispatches the `warm` and `image_sha` routes**, not the lead, because auto mode denied the lead's dispatch (decision P3-3).
 - **Phase 3: screenshots were taken with Edge driven over its DevTools protocol by a short Node script outside the repository, not with Playwright,** so nothing was installed or downloaded. GitHub pages were taken as a visitor who is not signed in.
-- **Phase 3: a fifth dashboard tile, live drift by day, beyond the four tiles of spec section 8, and `docs/llmops.md`,** both asked for by the owner on 14 October before the features stop (decision P3-10). The existing observability test was extended to list the tile and to pin what its query compares; no assertion was removed.
+- **Phase 3: two more dashboard tiles, live drift by day and requests to look at, beyond the four tiles of spec section 8, a links header in the workbook, and `docs/llmops.md`,** both asked for by the owner on 14 October before the features stop (decision P3-10). The existing observability test was extended to list the tile and to pin what its query compares; no assertion was removed.
 - No separate `plan/wave-N` pull requests in the unattended build (decision D12).
 - Branches are never force pushed, so a pushed branch is brought up to date by merging rather than rebasing (decision D9). Review findings on a branch lower in the stack are fixed on the branch at the top.
 - **The stack was merged late and in one go.** Nothing was merged until the owner turned on email privacy (decision D19). Then #2 to #11 were merged bottom-up in about an hour, each once `ci` passed, with `main` merged into the next branch each time. Each merge was checked to be the branch plus exactly what `main` had gained.
