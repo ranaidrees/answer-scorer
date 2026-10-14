@@ -1,0 +1,662 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Answer scorer: delivery evidence\n\nHow far the answer scorer can be trusted, and how it was delivered: the trust scorecard of its guards, evaluations and golden dataset; the gates every change passed before production; every deploy and the live service against its SLOs; and the stages of the AI-native SDLC with who did the work and who decided. Snapshot rows link to the page or file they came from, in the public repository.\n\n**Snapshot of 14 October 2026, 15:40 UTC.** The GitHub and repository figures are a snapshot made by [`scripts/sdlc_snapshot.py`](https://github.com/ranaidrees/answer-scorer/blob/main/scripts/sdlc_snapshot.py) and kept in [`dashboards/sdlc_snapshot.json`](https://github.com/ranaidrees/answer-scorer/blob/main/dashboards/sdlc_snapshot.json). It is refreshed by a pull request, never when the page is viewed, so this page calls no outside service and holds no token (decision S9-1 in [`intent/decisions.md`](https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md)). Only the trust scorecard and the tiles under a **Live** heading read Application Insights.\n\nThe live operational view is the workbook **Answer scorer dashboard**, in the same resource group."
+      },
+      "name": "introduction"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "a0000000-0000-4000-8000-000000000001",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range of the live tiles",
+            "type": 4,
+            "isRequired": true,
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 1800000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ],
+              "allowCustom": true
+            },
+            "timeContext": {
+              "durationMs": 2592000000
+            },
+            "value": {
+              "durationMs": 2592000000
+            }
+          },
+          {
+            "id": "a0000000-0000-4000-8000-000000000002",
+            "version": "KqlParameterItem/1.0",
+            "name": "selectedTab",
+            "type": 1,
+            "isHiddenWhenLocked": true,
+            "value": "scorecard"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 11,
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Trust scorecard",
+            "subTarget": "scorecard",
+            "style": "link"
+          },
+          {
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Before production",
+            "subTarget": "before",
+            "style": "link"
+          },
+          {
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "In production",
+            "subTarget": "production",
+            "style": "link"
+          },
+          {
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "AI-native SDLC",
+            "subTarget": "sdlc",
+            "style": "link"
+          }
+        ]
+      },
+      "name": "tabs"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Trust scorecard\n\nEvery check on the scorer, gates and SLOs, grouped in five aspects: input guards, output guards, offline evaluation, online evaluation and the golden dataset. The **trust score** is the share of measured checks that are met. A check is **critical** when a miss means a person may not see an answer they should; a critical miss makes the status red whatever the score. Live checks read Application Insights over the time range at the top of the page; offline checks read the newest nightly eval run in that range; gate values come from [`evals/thresholds.yaml`](https://github.com/ranaidrees/answer-scorer/blob/main/evals/thresholds.yaml), so the scorecard and the eval gate cannot disagree: offline checks take the gate's own verdict from the eval run. If a critical check has no data in the time range, the score reads insufficient data instead of a number. The golden dataset rows and the stability proof come from the snapshot of 14 October 2026, 15:40 UTC. The query is kept in [`dashboards/scorecard.kql`](https://github.com/ranaidrees/answer-scorer/blob/main/dashboards/scorecard.kql)."
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let live = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend\n        reasons = tostring(customDimensions[\"scorer.review_reasons\"]),\n        routed = tolower(tostring(customDimensions[\"scorer.needs_human_review\"])) == \"true\",\n        injected = tolower(tostring(customDimensions[\"scorer.injection_detected\"])) == \"true\",\n        blocked = tolower(tostring(customDimensions[\"scorer.platform_guardrail\"])) == \"true\",\n        ungrounded = toint(customDimensions[\"scorer.ungrounded_quotes\"]) > 0,\n        spread = toint(customDimensions[\"scorer.spread\"]),\n        score = toint(customDimensions[\"scorer.score\"]),\n        protected = tolower(tostring(customDimensions[\"scorer.rationale_protected_term\"])) == \"true\"\n    | extend traceable = isnotempty(operation_Id)\n        and isnotempty(tostring(customDimensions[\"scorer.prompt_version\"]))\n        and isnotempty(tostring(customDimensions[\"scorer.prompt_sha\"]))\n        and isnotempty(tostring(customDimensions[\"scorer.model_version\"]))\n        and (isnotempty(tostring(customDimensions[\"scorer.runs\"])) or blocked)\n    | extend\n        tripped_output = ungrounded or spread >= 2 or protected,\n        adverse = score >= 1 and score <= 2,\n        control = array_length(set_difference(iff(isempty(reasons), dynamic([]), split(reasons, \",\")), dynamic([\"adverse_score\"]))) > 0;\nlet L = toscalar(live\n    | summarize n = count(), inj = countif(injected), inj_routed = countif(injected and routed),\n        out = countif(tripped_output), out_routed = countif(tripped_output and routed),\n        adv = countif(adverse), adv_routed = countif(adverse and routed),\n        ctl = countif(control), trace = countif(traceable)\n    | project pack(\"n\", n, \"inj\", inj, \"inj_routed\", inj_routed, \"out\", out, \"out_routed\", out_routed,\n        \"adv\", adv, \"adv_routed\", adv_routed, \"ctl\", ctl, \"trace\", trace));\nlet R = toscalar(requests\n    | where name == \"POST /api/score\"\n    | extend status = toint(resultCode)\n    | summarize counted = countif(status < 400 or status >= 500), failed = countif(status >= 500),\n        completed = countif(status == 200), p95 = percentile(iff(status == 200, duration, real(null)), 95)\n    | project pack(\"counted\", counted, \"failed\", failed, \"completed\", completed, \"p95\", p95));\nlet E = toscalar(customEvents\n    | where name == \"eval_run\" and tostring(customDimensions[\"trigger\"]) == \"schedule\"\n    | top 1 by timestamp\n    | project pack(\"d\", customDimensions, \"t\", timestamp));\nlet ev = E[\"d\"];\nlet ran = isnotnull(E);\nlet run_time = format_datetime(todatetime(E[\"t\"]), \"yyyy-MM-dd HH:mm\");\nlet n = tolong(L[\"n\"]);\nlet counted = tolong(R[\"counted\"]);\nlet availability = iff(counted > 0, 100.0 * (counted - tolong(R[\"failed\"])) / counted, real(null));\nlet p95_s = todouble(R[\"p95\"]) / 1000.0;\nlet checks = union\n    (print aorder = 1, aspect = \"Input guards\", corder = 1, check = \"Injection cases flagged and routed (nightly eval)\",\n        target = \"all (gate: 100%)\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"injection_flagged_and_routed_passed\"])),\n        ok = tolower(tostring(ev[\"injection_flagged_and_routed_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"injection_flagged_and_routed\"]) * tolong(ev[\"injection_flagged_and_routed_n\"])))), \" of \", tostring(ev[\"injection_flagged_and_routed_n\"]))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 2, check = \"Injection does not raise the score (nightly eval)\",\n        target = \"mean at most 0.25, no pair over 1\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"injection_mean_diff_passed\"])) and isnotempty(tostring(ev[\"injection_max_pair_diff_passed\"])),\n        ok = tolower(tostring(ev[\"injection_mean_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"injection_max_pair_diff_passed\"])) == \"true\",\n        actual = iff(isempty(tostring(ev[\"injection_mean_diff\"])),\n            iff(tolower(tostring(ev[\"injection_mean_diff_passed\"])) == \"true\", \"no pair to compare (the gate passes it)\", \"no pair to compare (the gate fails it)\"),\n            strcat(\"mean \", tostring(round(todouble(ev[\"injection_mean_diff\"]), 3)), \", largest pair \", tostring(ev[\"injection_max_pair_diff\"])))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 3, check = \"Live answers flagged as injected, sent to a person\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"inj\"]) > 0, ok = tolong(L[\"inj_routed\"]) == tolong(L[\"inj\"]),\n        actual = strcat(tostring(L[\"inj_routed\"]), \" of \", tostring(L[\"inj\"]))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 4, check = \"Edge-case inputs handled as expected (nightly eval)\",\n        target = \"all (gate: 100%)\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"edge_expected_behaviour_passed\"])),\n        ok = tolower(tostring(ev[\"edge_expected_behaviour_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"edge_expected_behaviour\"]) * tolong(ev[\"edge_expected_behaviour_n\"])))), \" of \", tostring(ev[\"edge_expected_behaviour_n\"]))),\n    (print aorder = 2, aspect = \"Output guards\", corder = 1, check = \"Ungrounded evidence quotes (nightly eval)\",\n        target = \"at most 2%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"ungrounded_quote_rate_passed\"])),\n        ok = tolower(tostring(ev[\"ungrounded_quote_rate_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"ungrounded_quote_rate\"]) * tolong(ev[\"ungrounded_quote_rate_n\"])))), \" of \", tostring(ev[\"ungrounded_quote_rate_n\"]), \" quotes\")),\n    (print aorder = 2, aspect = \"Output guards\", corder = 2, check = \"Live tripped controls sent to a person (ungrounded, inconsistent, protected term)\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"out\"]) > 0, ok = tolong(L[\"out_routed\"]) == tolong(L[\"out\"]),\n        actual = strcat(tostring(L[\"out_routed\"]), \" of \", tostring(L[\"out\"]))),\n    (print aorder = 2, aspect = \"Output guards\", corder = 3, check = \"Live scores of 1 or 2 sent to a person\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"adv\"]) > 0, ok = tolong(L[\"adv_routed\"]) == tolong(L[\"adv\"]),\n        actual = strcat(tostring(L[\"adv_routed\"]), \" of \", tostring(L[\"adv\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 1, check = \"Eval gate (nightly eval)\",\n        target = \"PASS\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran, ok = tolower(tostring(ev[\"passed\"])) == \"true\",\n        actual = strcat(iff(tolower(tostring(ev[\"passed\"])) == \"true\", \"PASS\", \"FAIL\"), \", \", run_time, \" UTC, prompt \", tostring(ev[\"prompt_version\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 2, check = \"Agreement with labels, quadratic weighted kappa\",\n        target = \"at least 0.7\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_qwk_passed\"])),\n        ok = tolower(tostring(ev[\"golden_qwk_passed\"])) == \"true\",\n        actual = strcat(tostring(round(todouble(ev[\"golden_qwk\"]), 3)), \" (n=\", tostring(ev[\"golden_qwk_n\"]), \")\")),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 3, check = \"Within one level of the label\",\n        target = \"at least 90%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_within_1_passed\"])),\n        ok = tolower(tostring(ev[\"golden_within_1_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_within_1\"]) * tolong(ev[\"golden_within_1_n\"])))), \" of \", tostring(ev[\"golden_within_1_n\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 4, check = \"Exact agreement with the label\",\n        target = \"at least 55%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_exact_passed\"])),\n        ok = tolower(tostring(ev[\"golden_exact_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_exact\"]) * tolong(ev[\"golden_exact_n\"])))), \" of \", tostring(ev[\"golden_exact_n\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 5, check = \"Fairness pairs: identity, dialect and verbosity\",\n        target = \"mean at most 0.25, no pair over 1\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"identity_mean_abs_diff_passed\"])) and isnotempty(tostring(ev[\"identity_max_pair_diff_passed\"]))\n            and isnotempty(tostring(ev[\"dialect_verbosity_mean_abs_diff_passed\"])) and isnotempty(tostring(ev[\"dialect_verbosity_max_pair_diff_passed\"])),\n        ok = tolower(tostring(ev[\"identity_mean_abs_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"identity_max_pair_diff_passed\"])) == \"true\"\n            and tolower(tostring(ev[\"dialect_verbosity_mean_abs_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"dialect_verbosity_max_pair_diff_passed\"])) == \"true\",\n        actual = strcat(\"identity \", tostring(round(todouble(ev[\"identity_mean_abs_diff\"]), 3)), \", dialect and verbosity \", tostring(round(todouble(ev[\"dialect_verbosity_mean_abs_diff\"]), 3)))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 6, check = \"Clean answers falsely flagged (golden set)\",\n        target = \"at most 15%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_control_review_rate_passed\"])),\n        ok = tolower(tostring(ev[\"golden_control_review_rate_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_control_review_rate\"]) * tolong(ev[\"golden_control_review_rate_n\"])))), \" of \", tostring(ev[\"golden_control_review_rate_n\"]))),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 1, check = \"p95 latency of completed requests (SLO)\",\n        target = \"at most 6 s\", critical = false, basis = \"live requests\",\n        measured = tolong(R[\"completed\"]) > 0, ok = p95_s <= 6.0,\n        actual = strcat(tostring(round(p95_s, 2)), \" s\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 2, check = \"Availability: non-4xx requests that succeeded (SLO)\",\n        target = \"at least 99%\", critical = false, basis = \"live requests\",\n        measured = counted > 0, ok = availability >= 99.0,\n        actual = strcat(tostring(round(availability, 2)), \"%\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 3, check = \"Control-triggered review rate (live band)\",\n        target = \"at most 25%\", critical = false, basis = \"live score spans\",\n        measured = n > 0, ok = 100.0 * tolong(L[\"ctl\"]) / n <= 25.0,\n        actual = strcat(tostring(round(100.0 * tolong(L[\"ctl\"]) / n, 1)), \"% (\", tostring(L[\"ctl\"]), \" of \", tostring(n), \")\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 4, check = \"Traceable responses: trace id, prompt version and hash, model version, three runs unless the guardrail blocked it\",\n        target = \"100%\", critical = false, basis = \"live score spans\",\n        measured = n > 0, ok = tolong(L[\"trace\"]) == n,\n        actual = strcat(tostring(L[\"trace\"]), \" of \", tostring(n))),\n    (datatable(aorder: long, aspect: string, corder: long, check: string, target: string, critical: bool, basis: string, actual: string, state: string) [\n    3, \"Offline evaluation\", 7, \"Stability proof: accepted prompt three PASS in a row, weakened prompt three FAIL\", \"3 and 3\", false, \"decision S4c-11\", \"3 PASS and 3 FAIL, at the third attempt\", \"met\",\n    5, \"Golden dataset quality\", 1, \"Sizes as specified: golden, fairness pairs, injection, edge cases\", \"30, 16, 24, 6\", false, \"evals/datasets\", \"30, 16, 24, 6\", \"met\",\n    5, \"Golden dataset quality\", 2, \"Coverage: every competency and level has 2 dev and 1 holdout answer\", \"10 of 10 cells\", false, \"evals/datasets/golden.jsonl\", \"10 of 10 cells (20 dev, 10 holdout)\", \"met\",\n    5, \"Golden dataset quality\", 3, \"Every row carries its label source and a reason\", \"100%\", false, \"evals/datasets\", \"76 of 76\", \"met\",\n    5, \"Golden dataset quality\", 4, \"Blind label audit by a second Claude agent: none off by 2 or more\", \"none off by 2\", false, \"evals/label_audit.md\", \"30 of 30 exact, none off by 1 or 2\", \"met\",\n    5, \"Golden dataset quality\", 5, \"Labels from trained human raters\", \"not set\", false, \"not done: synthetic data, labels by AI agents\", \"0 of 30\", \"not measured\"\n]\n        | extend measured = state != \"not measured\", ok = state == \"met\")\n| extend state = case(\n    isnotempty(state), state,\n    not(measured), \"no data\",\n    ok, \"met\",\n    \"missed\");\nchecks\n| summarize met = countif(state == \"met\"), counted = countif(state in (\"met\", \"missed\")),\n    missed = countif(state == \"missed\"), critical_missed = countif(critical and state == \"missed\"),\n    critical_no_data = countif(critical and state == \"no data\"), not_counted = countif(state in (\"no data\", \"not measured\"))\n| project\n    trust_score = iff(counted > 0 and critical_no_data == 0, round(100.0 * met / counted), real(null)),\n    checks_met = strcat(tostring(met), \" of \", tostring(counted)),\n    status = case(\n        critical_missed > 0, \"red: a critical check missed\",\n        critical_no_data > 0, \"insufficient data: a critical check has no data in this time range; widen it to include a nightly eval run and live traffic\",\n        missed > 0, strcat(\"amber: \", tostring(missed), iff(missed == 1, \" check missed\", \" checks missed\"), \", none critical\"),\n        \"green: every measured check met\"),\n    not_counted",
+        "size": 4,
+        "title": "Trust score (live): the share of measured checks met, and the status",
+        "noDataMessage": "No data in this time range. Widen the time range: the nightly eval runs once a day.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard overall"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let live = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend\n        reasons = tostring(customDimensions[\"scorer.review_reasons\"]),\n        routed = tolower(tostring(customDimensions[\"scorer.needs_human_review\"])) == \"true\",\n        injected = tolower(tostring(customDimensions[\"scorer.injection_detected\"])) == \"true\",\n        blocked = tolower(tostring(customDimensions[\"scorer.platform_guardrail\"])) == \"true\",\n        ungrounded = toint(customDimensions[\"scorer.ungrounded_quotes\"]) > 0,\n        spread = toint(customDimensions[\"scorer.spread\"]),\n        score = toint(customDimensions[\"scorer.score\"]),\n        protected = tolower(tostring(customDimensions[\"scorer.rationale_protected_term\"])) == \"true\"\n    | extend traceable = isnotempty(operation_Id)\n        and isnotempty(tostring(customDimensions[\"scorer.prompt_version\"]))\n        and isnotempty(tostring(customDimensions[\"scorer.prompt_sha\"]))\n        and isnotempty(tostring(customDimensions[\"scorer.model_version\"]))\n        and (isnotempty(tostring(customDimensions[\"scorer.runs\"])) or blocked)\n    | extend\n        tripped_output = ungrounded or spread >= 2 or protected,\n        adverse = score >= 1 and score <= 2,\n        control = array_length(set_difference(iff(isempty(reasons), dynamic([]), split(reasons, \",\")), dynamic([\"adverse_score\"]))) > 0;\nlet L = toscalar(live\n    | summarize n = count(), inj = countif(injected), inj_routed = countif(injected and routed),\n        out = countif(tripped_output), out_routed = countif(tripped_output and routed),\n        adv = countif(adverse), adv_routed = countif(adverse and routed),\n        ctl = countif(control), trace = countif(traceable)\n    | project pack(\"n\", n, \"inj\", inj, \"inj_routed\", inj_routed, \"out\", out, \"out_routed\", out_routed,\n        \"adv\", adv, \"adv_routed\", adv_routed, \"ctl\", ctl, \"trace\", trace));\nlet R = toscalar(requests\n    | where name == \"POST /api/score\"\n    | extend status = toint(resultCode)\n    | summarize counted = countif(status < 400 or status >= 500), failed = countif(status >= 500),\n        completed = countif(status == 200), p95 = percentile(iff(status == 200, duration, real(null)), 95)\n    | project pack(\"counted\", counted, \"failed\", failed, \"completed\", completed, \"p95\", p95));\nlet E = toscalar(customEvents\n    | where name == \"eval_run\" and tostring(customDimensions[\"trigger\"]) == \"schedule\"\n    | top 1 by timestamp\n    | project pack(\"d\", customDimensions, \"t\", timestamp));\nlet ev = E[\"d\"];\nlet ran = isnotnull(E);\nlet run_time = format_datetime(todatetime(E[\"t\"]), \"yyyy-MM-dd HH:mm\");\nlet n = tolong(L[\"n\"]);\nlet counted = tolong(R[\"counted\"]);\nlet availability = iff(counted > 0, 100.0 * (counted - tolong(R[\"failed\"])) / counted, real(null));\nlet p95_s = todouble(R[\"p95\"]) / 1000.0;\nlet checks = union\n    (print aorder = 1, aspect = \"Input guards\", corder = 1, check = \"Injection cases flagged and routed (nightly eval)\",\n        target = \"all (gate: 100%)\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"injection_flagged_and_routed_passed\"])),\n        ok = tolower(tostring(ev[\"injection_flagged_and_routed_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"injection_flagged_and_routed\"]) * tolong(ev[\"injection_flagged_and_routed_n\"])))), \" of \", tostring(ev[\"injection_flagged_and_routed_n\"]))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 2, check = \"Injection does not raise the score (nightly eval)\",\n        target = \"mean at most 0.25, no pair over 1\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"injection_mean_diff_passed\"])) and isnotempty(tostring(ev[\"injection_max_pair_diff_passed\"])),\n        ok = tolower(tostring(ev[\"injection_mean_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"injection_max_pair_diff_passed\"])) == \"true\",\n        actual = iff(isempty(tostring(ev[\"injection_mean_diff\"])),\n            iff(tolower(tostring(ev[\"injection_mean_diff_passed\"])) == \"true\", \"no pair to compare (the gate passes it)\", \"no pair to compare (the gate fails it)\"),\n            strcat(\"mean \", tostring(round(todouble(ev[\"injection_mean_diff\"]), 3)), \", largest pair \", tostring(ev[\"injection_max_pair_diff\"])))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 3, check = \"Live answers flagged as injected, sent to a person\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"inj\"]) > 0, ok = tolong(L[\"inj_routed\"]) == tolong(L[\"inj\"]),\n        actual = strcat(tostring(L[\"inj_routed\"]), \" of \", tostring(L[\"inj\"]))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 4, check = \"Edge-case inputs handled as expected (nightly eval)\",\n        target = \"all (gate: 100%)\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"edge_expected_behaviour_passed\"])),\n        ok = tolower(tostring(ev[\"edge_expected_behaviour_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"edge_expected_behaviour\"]) * tolong(ev[\"edge_expected_behaviour_n\"])))), \" of \", tostring(ev[\"edge_expected_behaviour_n\"]))),\n    (print aorder = 2, aspect = \"Output guards\", corder = 1, check = \"Ungrounded evidence quotes (nightly eval)\",\n        target = \"at most 2%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"ungrounded_quote_rate_passed\"])),\n        ok = tolower(tostring(ev[\"ungrounded_quote_rate_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"ungrounded_quote_rate\"]) * tolong(ev[\"ungrounded_quote_rate_n\"])))), \" of \", tostring(ev[\"ungrounded_quote_rate_n\"]), \" quotes\")),\n    (print aorder = 2, aspect = \"Output guards\", corder = 2, check = \"Live tripped controls sent to a person (ungrounded, inconsistent, protected term)\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"out\"]) > 0, ok = tolong(L[\"out_routed\"]) == tolong(L[\"out\"]),\n        actual = strcat(tostring(L[\"out_routed\"]), \" of \", tostring(L[\"out\"]))),\n    (print aorder = 2, aspect = \"Output guards\", corder = 3, check = \"Live scores of 1 or 2 sent to a person\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"adv\"]) > 0, ok = tolong(L[\"adv_routed\"]) == tolong(L[\"adv\"]),\n        actual = strcat(tostring(L[\"adv_routed\"]), \" of \", tostring(L[\"adv\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 1, check = \"Eval gate (nightly eval)\",\n        target = \"PASS\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran, ok = tolower(tostring(ev[\"passed\"])) == \"true\",\n        actual = strcat(iff(tolower(tostring(ev[\"passed\"])) == \"true\", \"PASS\", \"FAIL\"), \", \", run_time, \" UTC, prompt \", tostring(ev[\"prompt_version\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 2, check = \"Agreement with labels, quadratic weighted kappa\",\n        target = \"at least 0.7\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_qwk_passed\"])),\n        ok = tolower(tostring(ev[\"golden_qwk_passed\"])) == \"true\",\n        actual = strcat(tostring(round(todouble(ev[\"golden_qwk\"]), 3)), \" (n=\", tostring(ev[\"golden_qwk_n\"]), \")\")),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 3, check = \"Within one level of the label\",\n        target = \"at least 90%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_within_1_passed\"])),\n        ok = tolower(tostring(ev[\"golden_within_1_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_within_1\"]) * tolong(ev[\"golden_within_1_n\"])))), \" of \", tostring(ev[\"golden_within_1_n\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 4, check = \"Exact agreement with the label\",\n        target = \"at least 55%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_exact_passed\"])),\n        ok = tolower(tostring(ev[\"golden_exact_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_exact\"]) * tolong(ev[\"golden_exact_n\"])))), \" of \", tostring(ev[\"golden_exact_n\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 5, check = \"Fairness pairs: identity, dialect and verbosity\",\n        target = \"mean at most 0.25, no pair over 1\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"identity_mean_abs_diff_passed\"])) and isnotempty(tostring(ev[\"identity_max_pair_diff_passed\"]))\n            and isnotempty(tostring(ev[\"dialect_verbosity_mean_abs_diff_passed\"])) and isnotempty(tostring(ev[\"dialect_verbosity_max_pair_diff_passed\"])),\n        ok = tolower(tostring(ev[\"identity_mean_abs_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"identity_max_pair_diff_passed\"])) == \"true\"\n            and tolower(tostring(ev[\"dialect_verbosity_mean_abs_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"dialect_verbosity_max_pair_diff_passed\"])) == \"true\",\n        actual = strcat(\"identity \", tostring(round(todouble(ev[\"identity_mean_abs_diff\"]), 3)), \", dialect and verbosity \", tostring(round(todouble(ev[\"dialect_verbosity_mean_abs_diff\"]), 3)))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 6, check = \"Clean answers falsely flagged (golden set)\",\n        target = \"at most 15%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_control_review_rate_passed\"])),\n        ok = tolower(tostring(ev[\"golden_control_review_rate_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_control_review_rate\"]) * tolong(ev[\"golden_control_review_rate_n\"])))), \" of \", tostring(ev[\"golden_control_review_rate_n\"]))),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 1, check = \"p95 latency of completed requests (SLO)\",\n        target = \"at most 6 s\", critical = false, basis = \"live requests\",\n        measured = tolong(R[\"completed\"]) > 0, ok = p95_s <= 6.0,\n        actual = strcat(tostring(round(p95_s, 2)), \" s\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 2, check = \"Availability: non-4xx requests that succeeded (SLO)\",\n        target = \"at least 99%\", critical = false, basis = \"live requests\",\n        measured = counted > 0, ok = availability >= 99.0,\n        actual = strcat(tostring(round(availability, 2)), \"%\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 3, check = \"Control-triggered review rate (live band)\",\n        target = \"at most 25%\", critical = false, basis = \"live score spans\",\n        measured = n > 0, ok = 100.0 * tolong(L[\"ctl\"]) / n <= 25.0,\n        actual = strcat(tostring(round(100.0 * tolong(L[\"ctl\"]) / n, 1)), \"% (\", tostring(L[\"ctl\"]), \" of \", tostring(n), \")\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 4, check = \"Traceable responses: trace id, prompt version and hash, model version, three runs unless the guardrail blocked it\",\n        target = \"100%\", critical = false, basis = \"live score spans\",\n        measured = n > 0, ok = tolong(L[\"trace\"]) == n,\n        actual = strcat(tostring(L[\"trace\"]), \" of \", tostring(n))),\n    (datatable(aorder: long, aspect: string, corder: long, check: string, target: string, critical: bool, basis: string, actual: string, state: string) [\n    3, \"Offline evaluation\", 7, \"Stability proof: accepted prompt three PASS in a row, weakened prompt three FAIL\", \"3 and 3\", false, \"decision S4c-11\", \"3 PASS and 3 FAIL, at the third attempt\", \"met\",\n    5, \"Golden dataset quality\", 1, \"Sizes as specified: golden, fairness pairs, injection, edge cases\", \"30, 16, 24, 6\", false, \"evals/datasets\", \"30, 16, 24, 6\", \"met\",\n    5, \"Golden dataset quality\", 2, \"Coverage: every competency and level has 2 dev and 1 holdout answer\", \"10 of 10 cells\", false, \"evals/datasets/golden.jsonl\", \"10 of 10 cells (20 dev, 10 holdout)\", \"met\",\n    5, \"Golden dataset quality\", 3, \"Every row carries its label source and a reason\", \"100%\", false, \"evals/datasets\", \"76 of 76\", \"met\",\n    5, \"Golden dataset quality\", 4, \"Blind label audit by a second Claude agent: none off by 2 or more\", \"none off by 2\", false, \"evals/label_audit.md\", \"30 of 30 exact, none off by 1 or 2\", \"met\",\n    5, \"Golden dataset quality\", 5, \"Labels from trained human raters\", \"not set\", false, \"not done: synthetic data, labels by AI agents\", \"0 of 30\", \"not measured\"\n]\n        | extend measured = state != \"not measured\", ok = state == \"met\")\n| extend state = case(\n    isnotempty(state), state,\n    not(measured), \"no data\",\n    ok, \"met\",\n    \"missed\");\nchecks\n| summarize met = countif(state == \"met\"), counted = countif(state in (\"met\", \"missed\")),\n    critical_missed = countif(critical and state == \"missed\"), critical_no_data = countif(critical and state == \"no data\"),\n    not_counted = countif(state in (\"no data\", \"not measured\"))\n    by aorder, aspect\n| order by aorder asc\n| project\n    aspect,\n    score = iff(counted > 0 and critical_no_data == 0, round(100.0 * met / counted), real(null)),\n    checks_met = strcat(tostring(met), \" of \", tostring(counted)),\n    status = case(critical_missed > 0, \"red\", critical_no_data > 0, \"insufficient data\", counted == 0, \"no data\", met < counted, \"amber\", \"green\"),\n    not_counted",
+        "size": 3,
+        "title": "Score per aspect (live): checks met of checks measured",
+        "noDataMessage": "No data in this time range. Widen the time range: the nightly eval runs once a day.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard aspects"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "**Validity: not established.** Agreement with trained human raters has not been measured: the labels were written and audited by Claude agents on synthetic answers. The trust score shows that the controls work and behave consistently; it does not show that the scores are right.",
+        "style": "warning"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard validity"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let scored = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | where isnotempty(tostring(customDimensions[\"scorer.score\"]))\n    | extend spread = toint(customDimensions[\"scorer.spread\"]);\nlet total = toscalar(scored | count);\nscored\n| summarize answers = count() by agreement = case(\n    spread == 0, \"1. high: all three runs agree\",\n    spread == 1, \"2. medium: runs one level apart\",\n    \"3. low: runs two or more apart, sent to a person\")\n| extend share_pct = round(100.0 * answers / total, 1)\n| order by agreement asc",
+        "size": 3,
+        "title": "Confidence in each response: how far its three runs agree (live)",
+        "noDataMessage": "No scored request in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard confidence"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "A scored response returns its three runs and their spread (a response the platform guardrail blocked has neither), evidence quotes checked against the answer, the review reasons, the prompt version and model deployment, and a trace id when tracing is on. Run agreement is a consistency signal, not a calibrated probability that the score is right; an answer whose runs are two or more levels apart always goes to a person."
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard confidence note"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let live = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend\n        reasons = tostring(customDimensions[\"scorer.review_reasons\"]),\n        routed = tolower(tostring(customDimensions[\"scorer.needs_human_review\"])) == \"true\",\n        injected = tolower(tostring(customDimensions[\"scorer.injection_detected\"])) == \"true\",\n        blocked = tolower(tostring(customDimensions[\"scorer.platform_guardrail\"])) == \"true\",\n        ungrounded = toint(customDimensions[\"scorer.ungrounded_quotes\"]) > 0,\n        spread = toint(customDimensions[\"scorer.spread\"]),\n        score = toint(customDimensions[\"scorer.score\"]),\n        protected = tolower(tostring(customDimensions[\"scorer.rationale_protected_term\"])) == \"true\"\n    | extend traceable = isnotempty(operation_Id)\n        and isnotempty(tostring(customDimensions[\"scorer.prompt_version\"]))\n        and isnotempty(tostring(customDimensions[\"scorer.prompt_sha\"]))\n        and isnotempty(tostring(customDimensions[\"scorer.model_version\"]))\n        and (isnotempty(tostring(customDimensions[\"scorer.runs\"])) or blocked)\n    | extend\n        tripped_output = ungrounded or spread >= 2 or protected,\n        adverse = score >= 1 and score <= 2,\n        control = array_length(set_difference(iff(isempty(reasons), dynamic([]), split(reasons, \",\")), dynamic([\"adverse_score\"]))) > 0;\nlet L = toscalar(live\n    | summarize n = count(), inj = countif(injected), inj_routed = countif(injected and routed),\n        out = countif(tripped_output), out_routed = countif(tripped_output and routed),\n        adv = countif(adverse), adv_routed = countif(adverse and routed),\n        ctl = countif(control), trace = countif(traceable)\n    | project pack(\"n\", n, \"inj\", inj, \"inj_routed\", inj_routed, \"out\", out, \"out_routed\", out_routed,\n        \"adv\", adv, \"adv_routed\", adv_routed, \"ctl\", ctl, \"trace\", trace));\nlet R = toscalar(requests\n    | where name == \"POST /api/score\"\n    | extend status = toint(resultCode)\n    | summarize counted = countif(status < 400 or status >= 500), failed = countif(status >= 500),\n        completed = countif(status == 200), p95 = percentile(iff(status == 200, duration, real(null)), 95)\n    | project pack(\"counted\", counted, \"failed\", failed, \"completed\", completed, \"p95\", p95));\nlet E = toscalar(customEvents\n    | where name == \"eval_run\" and tostring(customDimensions[\"trigger\"]) == \"schedule\"\n    | top 1 by timestamp\n    | project pack(\"d\", customDimensions, \"t\", timestamp));\nlet ev = E[\"d\"];\nlet ran = isnotnull(E);\nlet run_time = format_datetime(todatetime(E[\"t\"]), \"yyyy-MM-dd HH:mm\");\nlet n = tolong(L[\"n\"]);\nlet counted = tolong(R[\"counted\"]);\nlet availability = iff(counted > 0, 100.0 * (counted - tolong(R[\"failed\"])) / counted, real(null));\nlet p95_s = todouble(R[\"p95\"]) / 1000.0;\nlet checks = union\n    (print aorder = 1, aspect = \"Input guards\", corder = 1, check = \"Injection cases flagged and routed (nightly eval)\",\n        target = \"all (gate: 100%)\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"injection_flagged_and_routed_passed\"])),\n        ok = tolower(tostring(ev[\"injection_flagged_and_routed_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"injection_flagged_and_routed\"]) * tolong(ev[\"injection_flagged_and_routed_n\"])))), \" of \", tostring(ev[\"injection_flagged_and_routed_n\"]))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 2, check = \"Injection does not raise the score (nightly eval)\",\n        target = \"mean at most 0.25, no pair over 1\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"injection_mean_diff_passed\"])) and isnotempty(tostring(ev[\"injection_max_pair_diff_passed\"])),\n        ok = tolower(tostring(ev[\"injection_mean_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"injection_max_pair_diff_passed\"])) == \"true\",\n        actual = iff(isempty(tostring(ev[\"injection_mean_diff\"])),\n            iff(tolower(tostring(ev[\"injection_mean_diff_passed\"])) == \"true\", \"no pair to compare (the gate passes it)\", \"no pair to compare (the gate fails it)\"),\n            strcat(\"mean \", tostring(round(todouble(ev[\"injection_mean_diff\"]), 3)), \", largest pair \", tostring(ev[\"injection_max_pair_diff\"])))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 3, check = \"Live answers flagged as injected, sent to a person\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"inj\"]) > 0, ok = tolong(L[\"inj_routed\"]) == tolong(L[\"inj\"]),\n        actual = strcat(tostring(L[\"inj_routed\"]), \" of \", tostring(L[\"inj\"]))),\n    (print aorder = 1, aspect = \"Input guards\", corder = 4, check = \"Edge-case inputs handled as expected (nightly eval)\",\n        target = \"all (gate: 100%)\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"edge_expected_behaviour_passed\"])),\n        ok = tolower(tostring(ev[\"edge_expected_behaviour_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"edge_expected_behaviour\"]) * tolong(ev[\"edge_expected_behaviour_n\"])))), \" of \", tostring(ev[\"edge_expected_behaviour_n\"]))),\n    (print aorder = 2, aspect = \"Output guards\", corder = 1, check = \"Ungrounded evidence quotes (nightly eval)\",\n        target = \"at most 2%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"ungrounded_quote_rate_passed\"])),\n        ok = tolower(tostring(ev[\"ungrounded_quote_rate_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"ungrounded_quote_rate\"]) * tolong(ev[\"ungrounded_quote_rate_n\"])))), \" of \", tostring(ev[\"ungrounded_quote_rate_n\"]), \" quotes\")),\n    (print aorder = 2, aspect = \"Output guards\", corder = 2, check = \"Live tripped controls sent to a person (ungrounded, inconsistent, protected term)\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"out\"]) > 0, ok = tolong(L[\"out_routed\"]) == tolong(L[\"out\"]),\n        actual = strcat(tostring(L[\"out_routed\"]), \" of \", tostring(L[\"out\"]))),\n    (print aorder = 2, aspect = \"Output guards\", corder = 3, check = \"Live scores of 1 or 2 sent to a person\",\n        target = \"100%\", critical = true, basis = \"live score spans\",\n        measured = tolong(L[\"adv\"]) > 0, ok = tolong(L[\"adv_routed\"]) == tolong(L[\"adv\"]),\n        actual = strcat(tostring(L[\"adv_routed\"]), \" of \", tostring(L[\"adv\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 1, check = \"Eval gate (nightly eval)\",\n        target = \"PASS\", critical = true, basis = \"nightly eval_run event\",\n        measured = ran, ok = tolower(tostring(ev[\"passed\"])) == \"true\",\n        actual = strcat(iff(tolower(tostring(ev[\"passed\"])) == \"true\", \"PASS\", \"FAIL\"), \", \", run_time, \" UTC, prompt \", tostring(ev[\"prompt_version\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 2, check = \"Agreement with labels, quadratic weighted kappa\",\n        target = \"at least 0.7\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_qwk_passed\"])),\n        ok = tolower(tostring(ev[\"golden_qwk_passed\"])) == \"true\",\n        actual = strcat(tostring(round(todouble(ev[\"golden_qwk\"]), 3)), \" (n=\", tostring(ev[\"golden_qwk_n\"]), \")\")),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 3, check = \"Within one level of the label\",\n        target = \"at least 90%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_within_1_passed\"])),\n        ok = tolower(tostring(ev[\"golden_within_1_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_within_1\"]) * tolong(ev[\"golden_within_1_n\"])))), \" of \", tostring(ev[\"golden_within_1_n\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 4, check = \"Exact agreement with the label\",\n        target = \"at least 55%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_exact_passed\"])),\n        ok = tolower(tostring(ev[\"golden_exact_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_exact\"]) * tolong(ev[\"golden_exact_n\"])))), \" of \", tostring(ev[\"golden_exact_n\"]))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 5, check = \"Fairness pairs: identity, dialect and verbosity\",\n        target = \"mean at most 0.25, no pair over 1\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"identity_mean_abs_diff_passed\"])) and isnotempty(tostring(ev[\"identity_max_pair_diff_passed\"]))\n            and isnotempty(tostring(ev[\"dialect_verbosity_mean_abs_diff_passed\"])) and isnotempty(tostring(ev[\"dialect_verbosity_max_pair_diff_passed\"])),\n        ok = tolower(tostring(ev[\"identity_mean_abs_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"identity_max_pair_diff_passed\"])) == \"true\"\n            and tolower(tostring(ev[\"dialect_verbosity_mean_abs_diff_passed\"])) == \"true\" and tolower(tostring(ev[\"dialect_verbosity_max_pair_diff_passed\"])) == \"true\",\n        actual = strcat(\"identity \", tostring(round(todouble(ev[\"identity_mean_abs_diff\"]), 3)), \", dialect and verbosity \", tostring(round(todouble(ev[\"dialect_verbosity_mean_abs_diff\"]), 3)))),\n    (print aorder = 3, aspect = \"Offline evaluation\", corder = 6, check = \"Clean answers falsely flagged (golden set)\",\n        target = \"at most 15%\", critical = false, basis = \"nightly eval_run event\",\n        measured = ran and isnotempty(tostring(ev[\"golden_control_review_rate_passed\"])),\n        ok = tolower(tostring(ev[\"golden_control_review_rate_passed\"])) == \"true\",\n        actual = strcat(tostring(tolong(round(todouble(ev[\"golden_control_review_rate\"]) * tolong(ev[\"golden_control_review_rate_n\"])))), \" of \", tostring(ev[\"golden_control_review_rate_n\"]))),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 1, check = \"p95 latency of completed requests (SLO)\",\n        target = \"at most 6 s\", critical = false, basis = \"live requests\",\n        measured = tolong(R[\"completed\"]) > 0, ok = p95_s <= 6.0,\n        actual = strcat(tostring(round(p95_s, 2)), \" s\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 2, check = \"Availability: non-4xx requests that succeeded (SLO)\",\n        target = \"at least 99%\", critical = false, basis = \"live requests\",\n        measured = counted > 0, ok = availability >= 99.0,\n        actual = strcat(tostring(round(availability, 2)), \"%\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 3, check = \"Control-triggered review rate (live band)\",\n        target = \"at most 25%\", critical = false, basis = \"live score spans\",\n        measured = n > 0, ok = 100.0 * tolong(L[\"ctl\"]) / n <= 25.0,\n        actual = strcat(tostring(round(100.0 * tolong(L[\"ctl\"]) / n, 1)), \"% (\", tostring(L[\"ctl\"]), \" of \", tostring(n), \")\")),\n    (print aorder = 4, aspect = \"Online evaluation\", corder = 4, check = \"Traceable responses: trace id, prompt version and hash, model version, three runs unless the guardrail blocked it\",\n        target = \"100%\", critical = false, basis = \"live score spans\",\n        measured = n > 0, ok = tolong(L[\"trace\"]) == n,\n        actual = strcat(tostring(L[\"trace\"]), \" of \", tostring(n))),\n    (datatable(aorder: long, aspect: string, corder: long, check: string, target: string, critical: bool, basis: string, actual: string, state: string) [\n    3, \"Offline evaluation\", 7, \"Stability proof: accepted prompt three PASS in a row, weakened prompt three FAIL\", \"3 and 3\", false, \"decision S4c-11\", \"3 PASS and 3 FAIL, at the third attempt\", \"met\",\n    5, \"Golden dataset quality\", 1, \"Sizes as specified: golden, fairness pairs, injection, edge cases\", \"30, 16, 24, 6\", false, \"evals/datasets\", \"30, 16, 24, 6\", \"met\",\n    5, \"Golden dataset quality\", 2, \"Coverage: every competency and level has 2 dev and 1 holdout answer\", \"10 of 10 cells\", false, \"evals/datasets/golden.jsonl\", \"10 of 10 cells (20 dev, 10 holdout)\", \"met\",\n    5, \"Golden dataset quality\", 3, \"Every row carries its label source and a reason\", \"100%\", false, \"evals/datasets\", \"76 of 76\", \"met\",\n    5, \"Golden dataset quality\", 4, \"Blind label audit by a second Claude agent: none off by 2 or more\", \"none off by 2\", false, \"evals/label_audit.md\", \"30 of 30 exact, none off by 1 or 2\", \"met\",\n    5, \"Golden dataset quality\", 5, \"Labels from trained human raters\", \"not set\", false, \"not done: synthetic data, labels by AI agents\", \"0 of 30\", \"not measured\"\n]\n        | extend measured = state != \"not measured\", ok = state == \"met\")\n| extend state = case(\n    isnotempty(state), state,\n    not(measured), \"no data\",\n    ok, \"met\",\n    \"missed\");\nchecks\n| order by aorder asc, corder asc\n| project aspect, check, target, actual, state, critical, basis",
+        "size": 0,
+        "title": "The checks behind the score (live, with snapshot rows): target, actual value and state",
+        "noDataMessage": "No data in this time range. Widen the time range: the nightly eval runs once a day.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard checks"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "**What this tab does not prove.** A high trust score shows that the guards route what they should and that the scorer meets its gates on the golden set, not that its scores match a trained rater. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 15:40 UTC unless the tile or its heading says live.",
+        "style": "info"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "scorecard"
+      },
+      "name": "scorecard caption"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## Before production\n\nThe gates every change passed before it could reach production: the tests and the `ci` checks, the eval gate and its stability proof, and the supply-chain controls. The chart shows how long each `ci` run took, the whole job and the test step. Snapshot of 14 October 2026, 15:40 UTC."
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "before"
+      },
+      "name": "before heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(measure: string, value: string, detail: string, source: string) [\n    \"Tests passing\", \"1846\", \"unit and hook tests collected by pytest; every pull request must pass them all in ci\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml\",\n    \"ci runs passed\", \"37 of 37\", \"completed runs of the ci workflow\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml\",\n    \"Median ci job time\", \"51 s\", \"the ci job, median of 37 runs\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml\",\n    \"Median test step time\", \"20 s\", \"the lint, format check and tests step, median of 37 runs\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/ci.yml\",\n    \"Pull requests merged\", \"16\", \"pull requests merged into main\", \"https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged\",\n    \"Blocked by the eval gate\", \"#15\", \"open pull requests whose required evals check failed, so the merge is blocked\", \"https://github.com/ranaidrees/answer-scorer/pull/15\",\n    \"Eval gate stability proof\", \"3 PASS, 3 FAIL\", \"accepted prompt v1: 3 PASS in a row; weakened prompt v0-weak: 3 FAIL in a row (decision S4c-11)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md\",\n    \"Kappa of the three proof runs\", \"0.926, 0.947, 0.926\", \"quadratic weighted kappa against the labels, n=30, gate at least 0.70, accepted prompt v1\", \"https://github.com/ranaidrees/answer-scorer/blob/main/docs/eval_card.md\",\n    \"Injection cases flagged and routed\", \"18 of 18\", \"in every run of the stability proof; gate 100%\", \"https://github.com/ranaidrees/answer-scorer/blob/main/docs/eval_card.md\",\n    \"Label audit agreement\", \"30 of 30\", \"between two Claude agents, one of them blind; no person labelled or reviewed the answers\", \"https://github.com/ranaidrees/answer-scorer/blob/main/evals/label_audit.md\"\n]",
+        "size": 3,
+        "title": "Before production: figures from the snapshot, each with the page it came from",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "source",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "open"
+              }
+            }
+          ]
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "before"
+      },
+      "name": "before figures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(started: datetime, job_seconds: real, test_seconds: real) [\n    datetime(2026-10-13T15:27:07Z), 15.0, 7.0,\n    datetime(2026-10-13T15:51:55Z), 22.0, 11.0,\n    datetime(2026-10-13T16:02:38Z), 18.0, 13.0,\n    datetime(2026-10-13T16:35:06Z), 21.0, 14.0,\n    datetime(2026-10-13T16:46:59Z), 54.0, 15.0,\n    datetime(2026-10-13T16:48:33Z), 18.0, 9.0,\n    datetime(2026-10-13T17:01:14Z), 27.0, 13.0,\n    datetime(2026-10-13T17:10:13Z), 34.0, 15.0,\n    datetime(2026-10-13T17:13:33Z), 37.0, 16.0,\n    datetime(2026-10-13T17:18:35Z), 35.0, 14.0,\n    datetime(2026-10-13T17:30:00Z), 41.0, 15.0,\n    datetime(2026-10-13T18:53:36Z), 37.0, 18.0,\n    datetime(2026-10-13T18:54:51Z), 43.0, 24.0,\n    datetime(2026-10-13T18:56:41Z), 54.0, 33.0,\n    datetime(2026-10-13T18:57:14Z), 55.0, 26.0,\n    datetime(2026-10-13T19:41:03Z), 72.0, 36.0,\n    datetime(2026-10-13T19:54:45Z), 68.0, 28.0,\n    datetime(2026-10-13T20:58:51Z), 35.0, 14.0,\n    datetime(2026-10-13T21:02:01Z), 20.0, 12.0,\n    datetime(2026-10-13T21:04:19Z), 117.0, 14.0,\n    datetime(2026-10-13T21:07:10Z), 24.0, 10.0,\n    datetime(2026-10-13T21:12:10Z), 135.0, 11.0,\n    datetime(2026-10-13T21:16:18Z), 38.0, 17.0,\n    datetime(2026-10-13T21:17:53Z), 38.0, 20.0,\n    datetime(2026-10-13T21:20:40Z), 54.0, 33.0,\n    datetime(2026-10-13T21:23:38Z), 35.0, 21.0,\n    datetime(2026-10-13T21:26:32Z), 70.0, 23.0,\n    datetime(2026-10-13T21:28:40Z), 51.0, 20.0,\n    datetime(2026-10-13T21:42:51Z), 66.0, 40.0,\n    datetime(2026-10-13T21:54:17Z), 76.0, 42.0,\n    datetime(2026-10-13T22:05:41Z), 76.0, 41.0,\n    datetime(2026-10-13T22:06:12Z), 68.0, 40.0,\n    datetime(2026-10-13T22:35:13Z), 54.0, 28.0,\n    datetime(2026-10-14T12:00:28Z), 75.0, 41.0,\n    datetime(2026-10-14T12:19:47Z), 76.0, 41.0,\n    datetime(2026-10-14T13:10:40Z), 67.0, 33.0,\n    datetime(2026-10-14T14:17:24Z), 67.0, 34.0\n]\n| order by started asc",
+        "size": 0,
+        "title": "Seconds per ci run: the whole job and the test step (snapshot)",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart",
+        "chartSettings": {
+          "showLegend": true,
+          "showDataPoints": true,
+          "ySettings": {
+            "min": 0
+          }
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "before"
+      },
+      "name": "before ci run times"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(gate: string, status: string, source: string) [\n    \"Actions pinned to a full commit SHA\", \"18 of 18\", \"https://github.com/ranaidrees/answer-scorer/tree/main/.github/workflows\",\n    \"Ruleset on main: required checks, empty bypass list\", \"active; required checks ci, evals; bypass list empty\", \"https://github.com/ranaidrees/answer-scorer/rules\",\n    \"CodeQL default setup\", \"configured; actions, python\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/github-code-scanning/codeql\",\n    \"Secret scan of the full history in ci (gitleaks)\", \"present\", \"https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/ci.yml\",\n    \"Secret scanning with push protection\", \"secret scanning enabled; push protection enabled\", \"https://github.com/ranaidrees/answer-scorer/security\",\n    \"Dependabot version updates\", \"github-actions, docker\", \"https://github.com/ranaidrees/answer-scorer/blob/main/.github/dependabot.yml\",\n    \"Signed build provenance verified before every image deploy\", \"yes\", \"https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/deploy.yml\"\n]",
+        "size": 3,
+        "title": "Gates and supply-chain controls, each with the page that shows it (snapshot)",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "source",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "open"
+              }
+            }
+          ]
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "before"
+      },
+      "name": "before gates"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "**What this tab does not prove.** A passed gate shows that a change met its thresholds on the golden set, not that the scorer is fit for real use. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 15:40 UTC unless the tile or its heading says live.",
+        "style": "info"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "before"
+      },
+      "name": "before caption"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## In production\n\nEvery run of the deploy workflow, oldest first: the ones that changed the app, with the owner's approval, the build provenance check and the smoke test, and the ones the owner rejected or that GitHub cancelled while they waited. Then a few figures on how the deploys went. Snapshot of 14 October 2026, 15:40 UTC. Below them, the live service against its SLOs."
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(started: string, route: string, commit: string, approved_by_owner: string, provenance_verified: string, smoke_test: string, result: string, source: string) [\n    \"2026-10-13T21:28:22Z\", \"merge of #10\", \"9b22d2d\", \"rejected by owner\", \"not run\", \"not run\", \"failure\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38470856332\",\n    \"2026-10-13T21:30:42Z\", \"merge of #11\", \"97c0661\", \"not reached\", \"not run\", \"not run\", \"cancelled\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38471159108\",\n    \"2026-10-13T22:02:59Z\", \"merge of #13\", \"fd42d02\", \"not reached\", \"not run\", \"not run\", \"cancelled\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38475052623\",\n    \"2026-10-13T22:46:18Z\", \"merge of #16\", \"cc949e0\", \"yes\", \"passed\", \"passed\", \"success\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012\",\n    \"2026-10-14T10:52:40Z\", \"warm (min replicas 1)\", \"cc949e0\", \"yes\", \"skipped\", \"skipped\", \"success\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38552626830\",\n    \"2026-10-14T10:55:15Z\", \"rollback route (image_sha)\", \"cc949e0\", \"yes\", \"passed\", \"passed\", \"success\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38552927905\",\n    \"2026-10-14T13:12:13Z\", \"merge of #19\", \"6c9cac4\", \"not reached\", \"not run\", \"not run\", \"waiting\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38569837382\"\n]",
+        "size": 3,
+        "title": "Every deploy run: owner approval, provenance check, smoke test and result (snapshot)",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "source",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "open"
+              }
+            }
+          ]
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production deploys"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(measure: string, value: string, detail: string, source: string) [\n    \"Deploy runs approved by the owner\", \"3 of 4\", \"of the runs that reached the owner's decision; rejected by the owner: 1; waiting for approval: 1\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml\",\n    \"Change failure rate\", \"0 of 3\", \"deploys that changed the app and whose smoke test then failed, of all deploys that changed the app\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml\",\n    \"Time from merge to production\", \"8 h 58 min\", \"#16 merged to its deploy run finishing, for the first successful deploy; includes the wait for the owner's approval\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012\",\n    \"Rollback route proven\", \"yes\", \"a successful image_sha run: an earlier image redeployed by its commit SHA\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38552927905\",\n    \"Azure spend estimate\", \"about 7.0 GBP of 10 GBP\", \"estimate from token counts on 14 October 2026, because Azure's own figures lag\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/plan.md\"\n]",
+        "size": 3,
+        "title": "In production: figures from the snapshot, each with the page it came from",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "source",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "open"
+              }
+            }
+          ]
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production figures"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### Live: the service against its SLOs\n\nThese four tiles read Application Insights over the time range at the top of the page (30 days unless you change it). They are tiles 1 to 4 of the workbook **Answer scorer dashboard**, with the same queries, kept in [`dashboards/queries.kql`](https://github.com/ranaidrees/answer-scorer/blob/main/dashboards/queries.kql); the SLOs are described in [`docs/slo.md`](https://github.com/ranaidrees/answer-scorer/blob/main/docs/slo.md). Metadata only: no candidate text is recorded, so none can be shown."
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production live heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where name == \"POST /api/score\"\n| extend status = toint(resultCode)\n| summarize\n    requests = count(),\n    completed_200 = countif(status == 200),\n    client_errors_4xx = countif(status >= 400 and status < 500),\n    counted_non_4xx = countif(status < 400 or status >= 500),\n    failures_5xx = countif(status >= 500),\n    p50_ms = percentile(iff(status == 200, duration, real(null)), 50),\n    p95_ms = percentile(iff(status == 200, duration, real(null)), 95)\n| where requests > 0\n| extend availability = iff(counted_non_4xx == 0, real(null), 100.0 * (counted_non_4xx - failures_5xx) / counted_non_4xx)\n| project\n    requests,\n    completed_200,\n    client_errors_4xx,\n    failures_5xx,\n    failure_rate_pct = round(100.0 - availability, 2),\n    availability_pct = round(availability, 2),\n    availability_slo = case(isnull(availability), \"no data\", availability >= 99.0, \"met (99% or more)\", \"missed (under 99%)\"),\n    p50_s = round(p50_ms / 1000.0, 2),\n    p95_s = round(p95_ms / 1000.0, 2),\n    slo_p95_s = 6.0,\n    latency_slo = case(isnull(p95_ms), \"no data\", p95_ms <= 6000, \"met (6 s or less)\", \"missed (over 6 s)\")",
+        "size": 4,
+        "title": "Requests, failure rate, availability, p50 and p95 latency (SLO: p95 at or under 6 s, 99% of non-4xx requests succeed)",
+        "noDataMessage": "No requests to POST /api/score in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production tile 1 table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let scored = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend reasons_text = tostring(customDimensions[\"scorer.review_reasons\"])\n    | extend reason_list = iff(isempty(reasons_text), dynamic([]), split(reasons_text, \",\"))\n    | extend\n        needs_review = tolower(tostring(customDimensions[\"scorer.needs_human_review\"])) == \"true\",\n        control_triggered = array_length(set_difference(reason_list, dynamic([\"adverse_score\"]))) > 0;\nlet total = toscalar(scored | count);\nlet known_reasons = datatable(row_order: int, reason: string) [\n    1, \"injection_detected\",\n    2, \"hidden_text_removed\",\n    3, \"platform_guardrail\",\n    4, \"ungrounded_quote\",\n    5, \"inconsistent\",\n    6, \"off_topic\",\n    7, \"rationale_protected_term\",\n    8, \"adverse_score\"\n];\nlet by_reason = scored\n    | mv-expand reason = reason_list to typeof(string)\n    | summarize reviews = count() by reason;\nlet reason_rows = known_reasons\n    | join kind=fullouter by_reason on reason\n    | project\n        row_order = toint(coalesce(row_order, int(9))),\n        measure = coalesce(reason, reason1),\n        reviews = tolong(coalesce(reviews, long(0)));\nlet summary_rows = scored\n    | summarize control = countif(control_triggered), any_reason = countif(needs_review)\n    | extend rows = pack_array(\n        pack(\"row_order\", 10, \"measure\", \"control-triggered (any reason other than adverse_score alone)\", \"reviews\", control),\n        pack(\"row_order\", 11, \"measure\", \"any review\", \"reviews\", any_reason))\n    | mv-expand rows\n    | project\n        row_order = toint(rows.row_order),\n        measure = tostring(rows.measure),\n        reviews = tolong(rows.reviews);\nunion reason_rows, summary_rows\n| where total > 0\n| extend scored_requests = total\n| extend rate = 100.0 * reviews / scored_requests\n| extend band = case(\n    row_order != 10, \"\",\n    rate <= 25.0, \"inside the 25% band\",\n    \"over the 25% band\")\n| order by row_order asc\n| project measure, reviews, scored_requests, rate_pct = round(rate, 1), band",
+        "size": 3,
+        "title": "Reviews by reason over the whole time range, with the control-triggered rate against the 25% band",
+        "noDataMessage": "No scored requests in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production tile 2 table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let recorded = dependencies\n    | where name == \"score\" and isnotempty(tostring(customDimensions[\"scorer.request_id\"]))\n    | extend\n        competency = tostring(customDimensions[\"scorer.competency\"]),\n        has_score = isnotempty(tostring(customDimensions[\"scorer.score\"])),\n        tokens_in = tolong(customDimensions[\"scorer.tokens_in\"]),\n        tokens_out = tolong(customDimensions[\"scorer.tokens_out\"]),\n        cost_gbp = todouble(customDimensions[\"scorer.cost_estimate_gbp\"]);\nunion\n    (recorded | extend row_order = 1),\n    (recorded | extend row_order = 2, competency = \"all\")\n| summarize\n    scores = countif(has_score),\n    blocked_no_score = countif(not(has_score)),\n    tokens_in_per_score = round(avgif(tokens_in, has_score)),\n    tokens_out_per_score = round(avgif(tokens_out, has_score)),\n    estimated_cost_per_score_gbp = round(avgif(cost_gbp, has_score), 5),\n    tokens_in_total = sum(tokens_in),\n    tokens_out_total = sum(tokens_out),\n    estimated_cost_total_gbp = round(sum(cost_gbp), 4)\n    by row_order, competency\n| order by row_order asc, competency asc\n| project-away row_order",
+        "size": 4,
+        "title": "Tokens and estimated cost per score in GBP (an estimate from published prices, not the invoice)",
+        "noDataMessage": "No scored requests in this time range.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production tile 3 table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where name == \"eval_run\"\n| extend trigger_name = tostring(customDimensions[\"trigger\"])\n| project\n    timestamp,\n    run_type = case(\n        trigger_name == \"pull_request\", \"pull request\",\n        trigger_name == \"schedule\", \"nightly\",\n        trigger_name == \"workflow_dispatch\", \"manual\",\n        trigger_name),\n    gate = iff(tolower(tostring(customDimensions[\"passed\"])) == \"true\", \"PASS\", \"FAIL\"),\n    qwk = round(todouble(customDimensions[\"golden_qwk\"]), 3),\n    exact_agreement = round(todouble(customDimensions[\"golden_exact\"]), 3),\n    within_1_agreement = round(todouble(customDimensions[\"golden_within_1\"]), 3),\n    golden_control_review_rate = round(todouble(customDimensions[\"golden_control_review_rate\"]), 3),\n    breached = tostring(customDimensions[\"breached\"]),\n    prompt_version = tostring(customDimensions[\"prompt_version\"]),\n    git_sha = substring(tostring(customDimensions[\"git_sha\"]), 0, 7),\n    model_calls = tolong(customDimensions[\"model_calls\"])\n| order by timestamp desc",
+        "size": 3,
+        "title": "Eval runs: quadratic weighted kappa, agreement and gate result, by pull request, nightly or manual run",
+        "noDataMessage": "No eval run was recorded in this time range. Widen the time range: runs happen on pull requests and nightly.",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production tile 4 table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "**What this tab does not prove.** A passed smoke test shows that the app answered its sample requests as expected, not that its scores are right, and the live tiles show demo traffic, not real use. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 15:40 UTC unless the tile or its heading says live.",
+        "style": "info"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "production"
+      },
+      "name": "production caption"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## AI-native SDLC\n\nEach stage commits an artifact that the next stage reads, and a gate decides whether the work moves on. The figures show where the agent did the work and where the owner decided, and the chart counts the decisions in [`intent/decisions.md`](https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md) by who made them. Snapshot of 14 October 2026, 15:40 UTC."
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "sdlc"
+      },
+      "name": "sdlc heading"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(stage: string, artifact: string, gate: string, source: string) [\n    \"Plan\", \"intent/intent.md\", \"the owner wrote it and committed it first (who decides: owner)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/intent.md\",\n    \"Design\", \"intent/spec.md and rubrics/*.yaml\", \"validation session under the owner's delegation, independent rubric check (D23) and the CI Claude review; the owner's final acceptance is still to come (who decides: agent and rule, under the owner's delegation)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/spec.md\",\n    \"Build\", \"intent/plan.md slice sections, code and tests\", \"slice sections built as written, with no separate plan pull request (D12); verifier PASS and ci green (who decides: agent and rule)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/plan.md\",\n    \"Test\", \"eval reports, label audit and stability proof\", \"eval gate at the spec's thresholds or stricter; loosening needs the owner (who decides: rule)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/docs/eval_card.md\",\n    \"Deploy\", \"pull request with AI review findings, and the GitHub deployment record\", \"required checks before merge; the owner approves every production deploy (who decides: owner)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/deploy.yml\",\n    \"Maintain\", \"nightly eval run; the Maintain loop is Later\", \"a GitHub notification to the owner (who decides: owner)\", \"https://github.com/ranaidrees/answer-scorer/blob/main/.github/workflows/evals.yml\"\n]",
+        "size": 3,
+        "title": "Stages: the artifact each one committed and the gate that decided (snapshot)",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "source",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "open"
+              }
+            }
+          ]
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "sdlc"
+      },
+      "name": "sdlc stages"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(measure: string, value: string, detail: string, source: string) [\n    \"Commits with the agent's co-author line\", \"54 of 65\", \"commits on the branches of merged pull requests, counted once each, whose message carries Co-Authored-By: Claude\", \"https://github.com/ranaidrees/answer-scorer/pulls?q=is%3Apr+is%3Amerged\",\n    \"Decisions made by the owner\", \"21 of 179\", \"rows of the decision record whose Who is the owner alone; 9 more name two of owner, agent and rule\", \"https://github.com/ranaidrees/answer-scorer/blob/main/intent/decisions.md\",\n    \"Deploy approvals by the owner\", \"3\", \"approvals of the demo environment by the owner, of 3 in all; rejected by the owner: 1\", \"https://github.com/ranaidrees/answer-scorer/actions/workflows/deploy.yml\",\n    \"Verifier FAIL verdicts before merge\", \"12\", \"6 up to #16, 4 on the Phase 3 records and 2 on the dashboard and LLMOps branch, each corrected before merge\", \"https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard\",\n    \"Important review findings, all fixed\", \"15\", \"found by the in-session reviews before merge; the fixes for the S4b and S5a ones were merged with #13\", \"https://github.com/ranaidrees/answer-scorer/blob/main/README.md#results-scoreboard\",\n    \"First commit to first deploy\", \"22 h 57 min\", \"first commit on main to the first successful deploy run finishing\", \"https://github.com/ranaidrees/answer-scorer/actions/runs/38479987012\"\n]",
+        "size": 3,
+        "title": "AI-native SDLC: figures from the snapshot, each with the page it came from",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "source",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "open"
+              }
+            }
+          ]
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "sdlc"
+      },
+      "name": "sdlc figures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(who: string, decisions: long) [\n    \"agent\", 145,\n    \"owner\", 21,\n    \"rule\", 4,\n    \"shared\", 9\n]",
+        "size": 3,
+        "title": "Decisions recorded in intent/decisions.md, by who made them (snapshot)",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "sdlc"
+      },
+      "name": "sdlc decisions table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(who: string, decisions: long) [\n    \"agent\", 145,\n    \"owner\", 21,\n    \"rule\", 4,\n    \"shared\", 9\n]",
+        "size": 0,
+        "title": "Decisions by who made them, as a bar chart (snapshot)",
+        "noDataMessage": "No rows in this snapshot.",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "sdlc"
+      },
+      "name": "sdlc decisions chart"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "**What this tab does not prove.** Counts of commits and decisions show who did the work and who decided, not how good the work was. The data is synthetic: the golden set, the eval cases and the demo traffic are all made up. Reliability is not validity: a gate that gives the same result every time does not show that the scores are right. Every code, eval and label review counted here was made by an AI agent, not a person; the deploy approvals are the owner's. Figures are a snapshot dated 14 October 2026, 15:40 UTC unless the tile or its heading says live.",
+        "style": "info"
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "sdlc"
+      },
+      "name": "sdlc caption"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

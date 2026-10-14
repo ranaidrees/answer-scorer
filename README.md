@@ -124,6 +124,7 @@ The artifact chain is intent, then spec, then plan, then pull requests, then pro
 | Weak prompt | A weakened prompt that the gate blocks; stays open and must not merge | [#15](https://github.com/ranaidrees/answer-scorer/pull/15) |
 | S8 | This demo pack | [#16](https://github.com/ranaidrees/answer-scorer/pull/16) |
 | S5b | First deploy, approved by the owner on 14 October; live traffic, live checks and these records | The `deploy` run for #16, and [#17](https://github.com/ranaidrees/answer-scorer/pull/17) for the records |
+| S9 | Delivery evidence dashboard: a second workbook, "Answer scorer: delivery evidence", opening on a trust scorecard (a trust score, a score per aspect for input guards, output guards, offline evaluation, online evaluation and golden dataset quality, and the confidence of each live response), then three tabs (before production, in production, AI-native SDLC), from live queries and a dated snapshot of GitHub and the repository. Its own [intent, spec and plan](intent/s9-delivery-evidence/intent.md) | [#21](https://github.com/ranaidrees/answer-scorer/pull/21) |
 
 Each slice had `ci` green, a verifier PASS and an independent review; the verdicts and findings are comments on its pull request.
 
