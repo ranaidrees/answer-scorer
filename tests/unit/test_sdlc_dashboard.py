@@ -688,3 +688,13 @@ def test_the_bicep_file_creates_one_workbook_bound_to_application_insights_by_na
 
 def test_ci_builds_the_new_bicep_file():
     assert "az bicep build --file infra/sdlc_dashboard.bicep --stdout > /dev/null" in read(CI_FILE)
+
+
+def test_the_no_pair_text_follows_the_gate_verdict_not_the_missing_value():
+    # The gate leaves the value out both when there was nothing to compare (it passes) and
+    # when an injected answer had no clean twin (it fails); the text must follow the verdict.
+    query = named(built(), "scorecard checks")["content"]["query"]
+    assert (
+        'iff(tolower(tostring(ev["injection_mean_diff_passed"])) == "true", '
+        '"no pair to compare (the gate passes it)", "no pair to compare (the gate fails it)")'
+    ) in query
