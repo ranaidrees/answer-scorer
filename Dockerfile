@@ -3,7 +3,7 @@
 # Nothing here needs a secret, and no build argument carries a value.
 
 # uv comes from its official image, pinned to an exact version.
-FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.3 AS uv
 
 FROM python:3.12.15-slim-trixie
 
